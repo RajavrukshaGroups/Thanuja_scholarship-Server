@@ -40,6 +40,22 @@ const scholarshipSchema = new mongoose.Schema(
       required: true,
     },
 
+    fieldOfStudy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "FieldOfStudy",
+      required: true,
+    },
+
+    educationLevels: {
+      type: [
+        {
+          type: String,
+          enum: ["Undergraduate", "Postgraduate", "PhD"],
+        },
+      ],
+      default: [],
+    },
+
     // 🔹 Coverage
     coverageArea: {
       type: String,

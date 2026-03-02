@@ -87,4 +87,11 @@ router.get(
 );
 
 router.get("/dropdown/types", protect, adminScholarships.getTypesDropdown);
+router.get(
+  "/dropdown/fields",
+  protect,
+  adminScholarships.getFieldOfStudyDropdown,
+);
+
+router.post("/create-field", protect, adminScholarships.createFieldOfStudy);
 module.exports = router;

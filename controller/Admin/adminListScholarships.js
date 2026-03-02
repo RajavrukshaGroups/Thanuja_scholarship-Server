@@ -1,6 +1,7 @@
 const Scholarships = require("../../models/scholarship");
 const ScholarshipTypes = require("../../models/scholarshipTypes");
 const ScholarshipSponsors = require("../../models/scholarshipSponsors");
+const FieldOfStudy = require("../../models/fieldOfStudy");
 
 const createScholarship = async (req, res) => {
   try {
@@ -10,6 +11,7 @@ const createScholarship = async (req, res) => {
       description,
       sponsor,
       type,
+      fieldOfStudy,
       coverageArea,
       eligibilityCriteria,
       documentsRequired,
@@ -17,6 +19,7 @@ const createScholarship = async (req, res) => {
       applicationStartDate,
       applicationDeadline,
       isFeatured,
+      educationLevels,
     } = req.body;
 
     // 🔎 Basic Validation
@@ -25,6 +28,7 @@ const createScholarship = async (req, res) => {
       !description ||
       !sponsor ||
       !type ||
+      !fieldOfStudy ||
       !coverageArea ||
       !applicationStartDate ||
       !applicationDeadline
@@ -34,12 +38,22 @@ const createScholarship = async (req, res) => {
       });
     }
 
+    // ✅ Check if fieldOfStudy exists
+    const fieldExists = await FieldOfStudy.findById(fieldOfStudy);
+
+    if (!fieldExists) {
+      return res.status(400).json({
+        message: "Invalid Field Of Study selected",
+      });
+    }
+
     const newScholarship = await Scholarships.create({
       name,
       catchyPhrase,
       description,
       sponsor,
       type,
+      fieldOfStudy,
       coverageArea,
       eligibilityCriteria,
       documentsRequired,
@@ -47,6 +61,7 @@ const createScholarship = async (req, res) => {
       applicationStartDate,
       applicationDeadline,
       isFeatured,
+      educationLevels,
     });
 
     return res.status(201).json({
@@ -87,6 +102,20 @@ const getAllScholarships = async (req, res) => {
         },
       },
       { $unwind: "$type" },
+      {
+        $lookup: {
+          from: "fieldofstudies", // ⚠️ collection name (very important)
+          localField: "fieldOfStudy",
+          foreignField: "_id",
+          as: "fieldOfStudy",
+        },
+      },
+      {
+        $unwind: {
+          path: "$fieldOfStudy",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
     ];
 
     /* 🔎 SEARCH FILTER */
@@ -97,6 +126,7 @@ const getAllScholarships = async (req, res) => {
             { name: { $regex: search, $options: "i" } },
             { "sponsor.title": { $regex: search, $options: "i" } },
             { "type.title": { $regex: search, $options: "i" } },
+            { "fieldOfStudy.name": { $regex: search, $options: "i" } }, // ✅ ADD THIS
           ],
         },
       });
@@ -193,9 +223,20 @@ const updateScholarship = async (req, res) => {
       });
     }
 
+    // ✅ If fieldOfStudy is being updated, validate it
+    if (req.body.fieldOfStudy) {
+      const fieldExists = await FieldOfStudy.findById(req.body.fieldOfStudy);
+
+      if (!fieldExists) {
+        return res.status(400).json({
+          message: "Invalid Field Of Study selected",
+        });
+      }
+    }
+
     Object.assign(scholarship, req.body);
 
-    await scholarship.save(); // slug auto updates if name changes
+    await scholarship.save();
 
     return res.status(200).json({
       message: "Scholarship updated successfully",
@@ -293,6 +334,53 @@ const getTypesDropdown = async (req, res) => {
   }
 };
 
+const getFieldOfStudyDropdown = async (req, res) => {
+  try {
+    const fields = await FieldOfStudy.find({ isActive: true })
+      .select("_id name")
+      .sort({ name: 1 });
+
+    return res.status(200).json({
+      data: fields,
+    });
+  } catch (err) {
+    return res.status(500).json({
+      message: "Error fetching fields of study",
+    });
+  }
+};
+
+const createFieldOfStudy = async (req, res) => {
+  try {
+    const { name } = req.body;
+
+    if (!name) {
+      return res.status(400).json({
+        message: "Field name is required",
+      });
+    }
+
+    const existing = await FieldOfStudy.findOne({ name });
+
+    if (existing) {
+      return res.status(400).json({
+        message: "Field already exists",
+      });
+    }
+
+    const field = await FieldOfStudy.create({ name });
+
+    return res.status(201).json({
+      message: "Field created successfully",
+      data: field,
+    });
+  } catch (err) {
+    return res.status(500).json({
+      message: "Error creating field of study",
+    });
+  }
+};
+
 module.exports = {
   createScholarship,
   getAllScholarships,
@@ -301,4 +389,6 @@ module.exports = {
   toggleScholarshipStatus,
   getSponsorsDropdown,
   getTypesDropdown,
+  getFieldOfStudyDropdown,
+  createFieldOfStudy,
 };
