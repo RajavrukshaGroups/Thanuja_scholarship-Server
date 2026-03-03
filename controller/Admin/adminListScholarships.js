@@ -28,6 +28,8 @@ const createScholarship = async (req, res) => {
       !description ||
       !sponsor ||
       !type ||
+      !Array.isArray(type) ||
+      type.length === 0 ||
       !fieldOfStudy ||
       !coverageArea ||
       !applicationStartDate ||
@@ -101,7 +103,7 @@ const getAllScholarships = async (req, res) => {
           as: "type",
         },
       },
-      { $unwind: "$type" },
+      // { $unwind: "$type" },
       {
         $lookup: {
           from: "fieldofstudies", // ⚠️ collection name (very important)

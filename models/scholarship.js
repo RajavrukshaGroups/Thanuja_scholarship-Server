@@ -34,11 +34,19 @@ const scholarshipSchema = new mongoose.Schema(
       required: true,
     },
 
-    type: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "ScholarshipTypes",
-      required: true,
-    },
+    // type: {
+    //   type: mongoose.Schema.Types.ObjectId,
+    //   ref: "ScholarshipTypes",
+    //   required: true,
+    // },
+
+    type: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "ScholarshipTypes",
+        required: true,
+      },
+    ],
 
     fieldOfStudy: {
       type: mongoose.Schema.Types.ObjectId,
