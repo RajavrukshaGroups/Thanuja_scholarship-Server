@@ -28,11 +28,19 @@ const scholarshipSchema = new mongoose.Schema(
     },
 
     // 🔹 Relationships
-    sponsor: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "ScholarshipSponsors",
-      required: true,
-    },
+    // sponsor: {
+    //   type: mongoose.Schema.Types.ObjectId,
+    //   ref: "ScholarshipSponsors",
+    //   required: true,
+    // },
+
+    sponsor: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "ScholarshipSponsors",
+        required: true,
+      },
+    ],
 
     // type: {
     //   type: mongoose.Schema.Types.ObjectId,
@@ -62,6 +70,16 @@ const scholarshipSchema = new mongoose.Schema(
         },
       ],
       default: [],
+    },
+
+    genderEligibility: {
+      type: [
+        {
+          type: String,
+          enum: ["Male", "Female", "Other"],
+        },
+      ],
+      default: ["Male", "Female", "Other"], // default = open to all
     },
 
     // 🔹 Coverage

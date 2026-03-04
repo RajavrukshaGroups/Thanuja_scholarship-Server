@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const Scholarships = require("../../models/scholarship");
 const ScholarshipTypes = require("../../models/scholarshipTypes");
 const ScholarshipSponsors = require("../../models/scholarshipSponsors");
@@ -20,13 +21,15 @@ const createScholarship = async (req, res) => {
       applicationDeadline,
       isFeatured,
       educationLevels,
+      genderEligibility,
     } = req.body;
 
     // 🔎 Basic Validation
     if (
       !name ||
       !description ||
-      !sponsor ||
+      !Array.isArray(sponsor) ||
+      sponsor.length === 0 ||
       !type ||
       !Array.isArray(type) ||
       type.length === 0 ||
@@ -40,13 +43,31 @@ const createScholarship = async (req, res) => {
       });
     }
 
-    // ✅ Check if fieldOfStudy exists
+    // ✅ Validate fieldOfStudy
     const fieldExists = await FieldOfStudy.findById(fieldOfStudy);
-
     if (!fieldExists) {
       return res.status(400).json({
         message: "Invalid Field Of Study selected",
       });
+    }
+
+    // ✅ Validate Gender (Optional but Professional)
+    const allowedGenders = ["Male", "Female", "Other"];
+
+    let finalGenderEligibility = ["Male", "Female", "Other"]; // default = open to all
+
+    if (Array.isArray(genderEligibility) && genderEligibility.length > 0) {
+      const isValid = genderEligibility.every((g) =>
+        allowedGenders.includes(g),
+      );
+
+      if (!isValid) {
+        return res.status(400).json({
+          message: "Invalid gender selection",
+        });
+      }
+
+      finalGenderEligibility = genderEligibility;
     }
 
     const newScholarship = await Scholarships.create({
@@ -64,6 +85,7 @@ const createScholarship = async (req, res) => {
       applicationDeadline,
       isFeatured,
       educationLevels,
+      genderEligibility: finalGenderEligibility, // ✅ ADDED HERE
     });
 
     return res.status(201).json({
@@ -81,11 +103,61 @@ const getAllScholarships = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = 5;
-    const search = req.query.search?.trim() || "";
-    const status = req.query.status || "all";
     const skip = (page - 1) * limit;
 
-    const basePipeline = [
+    const search = req.query.search?.trim() || "";
+    const status = req.query.status || "all";
+    const sponsorFilter = req.query.sponsor ? req.query.sponsor.split(",") : [];
+    const typeFilter = req.query.type ? req.query.type.split(",") : [];
+    const fieldFilter = req.query.fieldOfStudy || null;
+    const genderFilter = req.query.gender || null;
+
+    /* =========================================
+       STEP 1: BUILD MATCH CONDITIONS (BEFORE LOOKUP)
+    ========================================== */
+
+    const matchConditions = {};
+
+    // Status filter
+    if (status === "active") matchConditions.isActive = true;
+    if (status === "inactive") matchConditions.isActive = false;
+    if (status === "featured") matchConditions.isFeatured = true;
+
+    // Sponsor filter (array field)
+    if (sponsorFilter.length > 0) {
+      matchConditions.sponsor = {
+        $in: sponsorFilter.map((id) => new mongoose.Types.ObjectId(id)),
+      };
+    }
+
+    // Type filter (array field)
+    if (typeFilter.length > 0) {
+      matchConditions.type = {
+        $in: typeFilter.map((id) => new mongoose.Types.ObjectId(id)),
+      };
+    }
+
+    // Field of study filter
+    if (fieldFilter) {
+      matchConditions.fieldOfStudy = new mongoose.Types.ObjectId(fieldFilter);
+    }
+
+    // Gender filter (array field)
+    if (genderFilter) {
+      matchConditions.genderEligibility = genderFilter;
+    }
+
+    const basePipeline = [];
+
+    if (Object.keys(matchConditions).length > 0) {
+      basePipeline.push({ $match: matchConditions });
+    }
+
+    /* =========================================
+       STEP 2: LOOKUPS
+    ========================================== */
+
+    basePipeline.push(
       {
         $lookup: {
           from: "scholarshipsponsors",
@@ -94,7 +166,6 @@ const getAllScholarships = async (req, res) => {
           as: "sponsor",
         },
       },
-      { $unwind: "$sponsor" },
       {
         $lookup: {
           from: "scholarshiptypes",
@@ -103,10 +174,9 @@ const getAllScholarships = async (req, res) => {
           as: "type",
         },
       },
-      // { $unwind: "$type" },
       {
         $lookup: {
-          from: "fieldofstudies", // ⚠️ collection name (very important)
+          from: "fieldofstudies",
           localField: "fieldOfStudy",
           foreignField: "_id",
           as: "fieldOfStudy",
@@ -118,9 +188,12 @@ const getAllScholarships = async (req, res) => {
           preserveNullAndEmptyArrays: true,
         },
       },
-    ];
+    );
 
-    /* 🔎 SEARCH FILTER */
+    /* =========================================
+       STEP 3: SEARCH (AFTER LOOKUP)
+    ========================================== */
+
     if (search) {
       basePipeline.push({
         $match: {
@@ -128,28 +201,15 @@ const getAllScholarships = async (req, res) => {
             { name: { $regex: search, $options: "i" } },
             { "sponsor.title": { $regex: search, $options: "i" } },
             { "type.title": { $regex: search, $options: "i" } },
-            { "fieldOfStudy.name": { $regex: search, $options: "i" } }, // ✅ ADD THIS
+            { "fieldOfStudy.name": { $regex: search, $options: "i" } },
           ],
         },
       });
     }
 
-    /* 🔥 STATUS FILTER */
-    if (status === "active") {
-      basePipeline.push({ $match: { isActive: true } });
-    }
-
-    if (status === "inactive") {
-      basePipeline.push({ $match: { isActive: false } });
-    }
-
-    if (status === "featured") {
-      basePipeline.push({ $match: { isFeatured: true } });
-    }
-
-    /* =========================
-       GLOBAL STATS (NEW)
-    ========================== */
+    /* =========================================
+       STEP 4: GLOBAL STATS (UNFILTERED)
+    ========================================== */
 
     const statsResult = await Scholarships.aggregate([
       {
@@ -176,9 +236,9 @@ const getAllScholarships = async (req, res) => {
       featured: 0,
     };
 
-    /* =========================
-       PAGINATION COUNT
-    ========================== */
+    /* =========================================
+       STEP 5: PAGINATION COUNT
+    ========================================== */
 
     const countPipeline = [...basePipeline, { $count: "total" }];
     const totalData = await Scholarships.aggregate(countPipeline);
@@ -186,9 +246,9 @@ const getAllScholarships = async (req, res) => {
     const totalCount = totalData[0]?.total || 0;
     const totalPages = Math.ceil(totalCount / limit);
 
-    /* =========================
-       FETCH DATA
-    ========================== */
+    /* =========================================
+       STEP 6: FETCH DATA
+    ========================================== */
 
     const dataPipeline = [
       ...basePipeline,
@@ -203,7 +263,7 @@ const getAllScholarships = async (req, res) => {
       currentPage: page,
       totalPages,
       totalCount,
-      stats, // 🔥 SEND GLOBAL STATS
+      stats,
       data: scholarships,
     });
   } catch (err) {
