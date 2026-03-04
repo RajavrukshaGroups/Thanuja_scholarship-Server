@@ -4,6 +4,7 @@ const cors = require("cors");
 
 const { dbConnect } = require("./config/dbConnect");
 const adminRoutes = require("./routes/adminRoutes/adminRoutes");
+const scholarRoutes = require("./routes/scholarRoutes/scholarRoutes");
 
 const app = express();
 
@@ -16,7 +17,8 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use(
   cors({
-    origin: "http://localhost:5173", // no need array if single origin
+    // origin: "http://localhost:5173", // no need array if single origin
+    origin: "http://localhost:3000", // no need array if single origin
     credentials: true,
   }),
 );
@@ -25,6 +27,7 @@ app.use(
 dbConnect();
 
 app.use("/admin", adminRoutes);
+app.use("/scholar", scholarRoutes);
 
 // Test Route
 app.get("/", (req, res) => {
