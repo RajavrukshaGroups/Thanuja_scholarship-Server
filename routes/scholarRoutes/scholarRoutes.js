@@ -18,5 +18,6 @@ router.get(
   "/dropdown/sponsors",
   ListScholarshipsController.getSponsorsDropdown,
 );
+router.get("/filter-stats", ListScholarshipsController.getFilterStats);
 
 module.exports = router;

@@ -8,33 +8,67 @@ const scholarRoutes = require("./routes/scholarRoutes/scholarRoutes");
 
 const app = express();
 
-// Fallback port if not defined in .env
+// Fallback port
 const port = process.env.PORT || 7000;
 
-// Middleware
+/* ===============================
+   ALLOWED ORIGINS
+================================ */
+
+const allowedOrigins = [
+  "http://localhost:3000",
+  "http://localhost:5173",
+  "https://edufinscholarships.com",
+];
+
+/* ===============================
+   MIDDLEWARE
+================================ */
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use(
   cors({
-    // origin: "http://localhost:5173", // no need array if single origin
-    origin: "http://localhost:3000", // no need array if single origin
+    origin: function (origin, callback) {
+      // allow requests with no origin (mobile apps, postman etc.)
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true,
   }),
 );
 
-// Database Connection
+/* ===============================
+   DATABASE
+================================ */
+
 dbConnect();
+
+/* ===============================
+   ROUTES
+================================ */
 
 app.use("/admin", adminRoutes);
 app.use("/scholar", scholarRoutes);
 
-// Test Route
+/* ===============================
+   TEST ROUTE
+================================ */
+
 app.get("/", (req, res) => {
   res.status(200).send("Hello from Scholarship server");
 });
 
-// Start Server
+/* ===============================
+   SERVER START
+================================ */
+
 app.listen(port, () => {
   console.log(`Server is running at http://localhost:${port}`);
 });

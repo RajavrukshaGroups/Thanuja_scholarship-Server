@@ -5,14 +5,24 @@ const ScholarshipSponsors = require("../../models/scholarshipSponsors");
 
 const getScholarships = async (req, res) => {
   try {
-    const { search, fields, degreeLevels, types, sort = "latest" } = req.query;
+    const {
+      search,
+      fields,
+      degreeLevels,
+      types,
+      sponsors,
+      page = 1,
+      limit = 10,
+      sort = "latest",
+    } = req.query;
+
+    const skip = (page - 1) * limit;
 
     let filter = {
       isActive: true,
       applicationDeadline: { $gte: new Date() },
     };
 
-    // 🔎 Search
     if (search) {
       filter.$or = [
         { name: { $regex: search, $options: "i" } },
@@ -20,30 +30,39 @@ const getScholarships = async (req, res) => {
       ];
     }
 
-    // 🎓 Field of Study
     if (fields) {
       filter.fieldOfStudy = { $in: fields.split(",") };
     }
 
-    // 🎓 Degree Level
     if (degreeLevels) {
       filter.educationLevels = { $in: degreeLevels.split(",") };
     }
 
-    // 🏷 Scholarship Type
     if (types) {
       filter.type = { $in: types.split(",") };
     }
 
-    let query = Scholarships.find(filter).populate("sponsor type fieldOfStudy");
+    if (sponsors) {
+      filter.sponsor = { $in: sponsors.split(",") };
+    }
+
+    let query = Scholarships.find(filter)
+      .populate("sponsor type fieldOfStudy")
+      .skip(skip)
+      .limit(parseInt(limit));
 
     if (sort === "latest") {
       query = query.sort({ createdAt: -1 });
     }
 
     const scholarships = await query;
+    const total = await Scholarships.countDocuments(filter);
 
-    res.status(200).json({ data: scholarships });
+    res.status(200).json({
+      data: scholarships,
+      page: Number(page),
+      totalPages: Math.ceil(total / limit),
+    });
   } catch (err) {
     res.status(500).json({ message: "Error fetching scholarships" });
   }
@@ -128,6 +147,65 @@ const getSponsorsDropdown = async (req, res) => {
   }
 };
 
+const getFilterStats = async (req, res) => {
+  try {
+    const stats = await Scholarships.aggregate([
+      {
+        $match: {
+          isActive: true,
+          applicationDeadline: { $gte: new Date() },
+        },
+      },
+      {
+        $facet: {
+          fields: [
+            { $group: { _id: "$fieldOfStudy", count: { $sum: 1 } } },
+            {
+              $lookup: {
+                from: "fieldofstudies",
+                localField: "_id",
+                foreignField: "_id",
+                as: "field",
+              },
+            },
+            { $unwind: "$field" },
+            {
+              $project: {
+                name: "$field.name",
+                count: 1,
+              },
+            },
+          ],
+
+          types: [
+            { $unwind: "$type" },
+            { $group: { _id: "$type", count: { $sum: 1 } } },
+            {
+              $lookup: {
+                from: "scholarshiptypes",
+                localField: "_id",
+                foreignField: "_id",
+                as: "type",
+              },
+            },
+            { $unwind: "$type" },
+            {
+              $project: {
+                title: "$type.title",
+                count: 1,
+              },
+            },
+          ],
+        },
+      },
+    ]);
+
+    res.json(stats[0]);
+  } catch (err) {
+    res.status(500).json({ message: "Stats error" });
+  }
+};
+
 module.exports = {
   getScholarships,
   getFeaturedScholarships,
@@ -135,4 +213,5 @@ module.exports = {
   getFieldsDropdown,
   getTypesDropdown,
   getSponsorsDropdown,
+  getFilterStats,
 };
