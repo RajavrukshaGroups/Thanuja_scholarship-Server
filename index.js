@@ -15,11 +15,9 @@ const port = process.env.PORT || 7000;
    ALLOWED ORIGINS
 ================================ */
 
-const allowedOrigins = [
-  "http://localhost:3000",
-  "http://localhost:5173",
-  "https://edufinscholarships.com",
-];
+const allowedOrigins = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(",")
+  : [];
 
 /* ===============================
    MIDDLEWARE
