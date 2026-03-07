@@ -2,6 +2,8 @@ const Scholarships = require("../../models/scholarship");
 const ScholarshipTypes = require("../../models/scholarshipTypes");
 const FieldOfStudy = require("../../models/fieldOfStudy");
 const ScholarshipSponsors = require("../../models/scholarshipSponsors");
+const EnquiredUsers = require("../../models/enquiredUsers");
+const MembershipPlan = require("../../models/memberPlans");
 
 const getScholarships = async (req, res) => {
   try {
@@ -206,6 +208,58 @@ const getFilterStats = async (req, res) => {
   }
 };
 
+const createEnquiry = async (req, res) => {
+  try {
+    const { fullName, email, phone, educationLevel, degreeLevel } = req.body;
+
+    const enquiryData = {
+      fullName,
+      email,
+      phone,
+      educationLevel,
+    };
+
+    // only include degreeLevel if Post Metric
+    if (educationLevel === "Post Metric" && degreeLevel) {
+      enquiryData.degreeLevel = degreeLevel;
+    }
+
+    const enquiry = await EnquiredUsers.create(enquiryData);
+
+    res.status(201).json({
+      message: "Enquiry stored",
+      data: enquiry,
+    });
+  } catch (err) {
+    console.error("ENQUIRY ERROR:", err);
+
+    res.status(500).json({
+      message: err.message,
+    });
+  }
+};
+/* ======================================
+   GET ACTIVE MEMBERSHIP PLANS
+====================================== */
+
+const getMembershipPlans = async (req, res) => {
+  try {
+    const plans = await MembershipPlan.find({ isActive: true }).sort({
+      amount: 1,
+    }); // sorted by price
+
+    res.status(200).json({
+      data: plans,
+    });
+  } catch (err) {
+    console.error("Membership plan fetch error:", err);
+
+    res.status(500).json({
+      message: "Error fetching membership plans",
+    });
+  }
+};
+
 module.exports = {
   getScholarships,
   getFeaturedScholarships,
@@ -214,4 +268,6 @@ module.exports = {
   getTypesDropdown,
   getSponsorsDropdown,
   getFilterStats,
+  createEnquiry,
+  getMembershipPlans,
 };

@@ -9,7 +9,7 @@ router.get(
   ListScholarshipsController.getFeaturedScholarships,
 );
 router.get(
-  "scholarships/:slug",
+  "/scholarships/:slug",
   ListScholarshipsController.getScholarshipBySlug,
 );
 router.get("/dropdown/fields", ListScholarshipsController.getFieldsDropdown);
@@ -19,5 +19,7 @@ router.get(
   ListScholarshipsController.getSponsorsDropdown,
 );
 router.get("/filter-stats", ListScholarshipsController.getFilterStats);
+router.post("/enquiry", ListScholarshipsController.createEnquiry);
+router.get("/membership-plans", ListScholarshipsController.getMembershipPlans);
 
 module.exports = router;

@@ -94,4 +94,29 @@ router.get(
 );
 
 router.post("/create-field", protect, adminScholarships.createFieldOfStudy);
+router.post(
+  "/membership-plan",
+  protect,
+  adminScholarships.createMembershipPlan,
+);
+router.get(
+  "/membership-plans",
+  protect,
+  adminScholarships.getAllMembershipPlans,
+);
+router.put(
+  "/membership-plan/:id",
+  protect,
+  adminScholarships.updateMembershipPlan,
+);
+router.delete(
+  "/membership-plan/:id",
+  protect,
+  adminScholarships.deleteMembershipPlan,
+);
+router.patch(
+  "/membership-plan/status/:id",
+  protect,
+  adminScholarships.toggleMembershipPlanStatus,
+);
 module.exports = router;

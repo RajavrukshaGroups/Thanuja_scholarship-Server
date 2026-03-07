@@ -3,6 +3,7 @@ const Scholarships = require("../../models/scholarship");
 const ScholarshipTypes = require("../../models/scholarshipTypes");
 const ScholarshipSponsors = require("../../models/scholarshipSponsors");
 const FieldOfStudy = require("../../models/fieldOfStudy");
+const MembershipPlan = require("../../models/memberPlans");
 
 const createScholarship = async (req, res) => {
   try {
@@ -443,6 +444,156 @@ const createFieldOfStudy = async (req, res) => {
   }
 };
 
+const createMembershipPlan = async (req, res) => {
+  try {
+    const { planTitle, amount, planDuration, maxScholarships, benefits } =
+      req.body;
+
+    if (!planTitle || !amount || !planDuration || !maxScholarships) {
+      return res.status(400).json({
+        message:
+          "Plan title, amount, duration and maximum scholarships are required",
+      });
+    }
+
+    const plan = await MembershipPlan.create({
+      planTitle,
+      amount,
+      planDuration,
+      maxScholarships,
+      benefits,
+    });
+
+    res.status(201).json({
+      message: "Membership plan created successfully",
+      data: plan,
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+/* ======================================
+   GET ALL MEMBERSHIP PLANS
+====================================== */
+
+const getAllMembershipPlans = async (req, res) => {
+  try {
+    const plans = await MembershipPlan.find().sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      data: plans,
+    });
+  } catch (err) {
+    console.error("Fetch plans error:", err);
+    return res.status(500).json({
+      message: "Error fetching membership plans",
+    });
+  }
+};
+
+/* ======================================
+   UPDATE MEMBERSHIP PLAN
+====================================== */
+
+const updateMembershipPlan = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const plan = await MembershipPlan.findById(id);
+
+    if (!plan) {
+      return res.status(404).json({
+        message: "Membership plan not found",
+      });
+    }
+
+    const { planTitle, amount, planDuration, maxScholarships, benefits } =
+      req.body;
+
+    if (planTitle !== undefined) plan.planTitle = planTitle;
+    if (amount !== undefined) plan.amount = amount;
+    if (planDuration !== undefined) plan.planDuration = planDuration;
+    if (maxScholarships !== undefined) plan.maxScholarships = maxScholarships;
+    if (benefits !== undefined) plan.benefits = benefits;
+
+    await plan.save();
+
+    return res.status(200).json({
+      message: "Membership plan updated successfully",
+      data: plan,
+    });
+  } catch (err) {
+    console.error("Update plan error:", err);
+    return res.status(500).json({
+      message: "Error updating membership plan",
+    });
+  }
+};
+
+/* ======================================
+   DELETE MEMBERSHIP PLAN
+====================================== */
+
+const deleteMembershipPlan = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const plan = await MembershipPlan.findById(id);
+
+    if (!plan) {
+      return res.status(404).json({
+        message: "Membership plan not found",
+      });
+    }
+
+    await MembershipPlan.findByIdAndDelete(id);
+
+    return res.status(200).json({
+      message: "Membership plan deleted successfully",
+    });
+  } catch (err) {
+    console.error("Delete plan error:", err);
+    return res.status(500).json({
+      message: "Error deleting membership plan",
+    });
+  }
+};
+
+/* ======================================
+   TOGGLE ACTIVE / INACTIVE
+====================================== */
+
+const toggleMembershipPlanStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const plan = await MembershipPlan.findById(id);
+
+    if (!plan) {
+      return res.status(404).json({
+        message: "Membership plan not found",
+      });
+    }
+
+    plan.isActive = !plan.isActive;
+
+    await plan.save();
+
+    return res.status(200).json({
+      message: `Membership plan is now ${
+        plan.isActive ? "Active" : "Inactive"
+      }`,
+      data: plan,
+    });
+  } catch (err) {
+    console.error("Toggle plan error:", err);
+    return res.status(500).json({
+      message: "Error toggling membership plan status",
+    });
+  }
+};
+
 module.exports = {
   createScholarship,
   getAllScholarships,
@@ -453,4 +604,9 @@ module.exports = {
   getTypesDropdown,
   getFieldOfStudyDropdown,
   createFieldOfStudy,
+  createMembershipPlan,
+  getAllMembershipPlans,
+  updateMembershipPlan,
+  deleteMembershipPlan,
+  toggleMembershipPlanStatus,
 };
