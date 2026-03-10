@@ -3,6 +3,9 @@ const router = express.Router();
 
 const ListScholarshipsController = require("../../controller/Scholars/scholarListScholarship");
 
+const userRoutes = require("./userRoutes");
+const paymentRoutes = require("./paymentRoutes");
+
 router.get("/scholarships", ListScholarshipsController.getScholarships);
 router.get(
   "/scholarships/featured",
@@ -21,5 +24,15 @@ router.get(
 router.get("/filter-stats", ListScholarshipsController.getFilterStats);
 router.post("/enquiry", ListScholarshipsController.createEnquiry);
 router.get("/membership-plans", ListScholarshipsController.getMembershipPlans);
+
+/* ===============================
+   USER ROUTES
+================================ */
+router.use("/user", userRoutes);
+
+/* ===============================
+   PAYMENT ROUTES
+================================ */
+router.use("/payment", paymentRoutes);
 
 module.exports = router;

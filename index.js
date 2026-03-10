@@ -22,6 +22,7 @@ const allowedOrigins = process.env.CORS_ORIGINS
 /* ===============================
    MIDDLEWARE
 ================================ */
+app.use("/scholar/payment/webhook", express.raw({ type: "application/json" }));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
