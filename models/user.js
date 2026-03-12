@@ -2,13 +2,24 @@ const mongoose = require("mongoose");
 
 const userSchema = new mongoose.Schema(
   {
+    userId: {
+      type: String,
+      unique: true,
+    },
+
     fullName: String,
+
     email: {
       type: String,
+      required: true,
       unique: true,
       lowercase: true,
     },
-    phone: String,
+
+    phone: {
+      type: String,
+      unique: true,
+    },
 
     educationLevel: {
       type: String,
@@ -22,12 +33,14 @@ const userSchema = new mongoose.Schema(
 
     password: String,
 
+    googleDriveFolderId: String,
+
     isActive: {
       type: Boolean,
       default: true,
     },
   },
-  { timestamps: true },
+  { timestamps: true }
 );
 
 module.exports = mongoose.model("User", userSchema);

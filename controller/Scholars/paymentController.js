@@ -8,6 +8,9 @@ const User = require("../../models/user");
 const Enquiry = require("../../models/enquiredUsers");
 const sendMail = require("../../utils/sendEmail");
 const generatePassword = require("../../utils/generatePassword");
+const { createUserFolder } = require("../../utils/googleDrive");
+const generateUserId = require("../../utils/generateUserId");
+const { encrypt } = require("../../utils/encryption");
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
@@ -133,158 +136,13 @@ exports.createOrder = async (req, res) => {
    VERIFY PAYMENT
 ===================================================== */
 
-// exports.verifyPayment = async (req, res) => {
-//   try {
-//     const {
-//       razorpay_order_id,
-//       razorpay_payment_id,
-//       razorpay_signature,
-//       planId,
-//       scholarships,
-//     } = req.body;
-
-//     /* =============================
-//        VERIFY SIGNATURE
-//     ============================== */
-
-//     const generatedSignature = crypto
-//       .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
-//       .update(razorpay_order_id + "|" + razorpay_payment_id)
-//       .digest("hex");
-
-//     if (generatedSignature !== razorpay_signature) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Payment verification failed",
-//       });
-//     }
-
-//     /* =============================
-//        FIND PAYMENT RECORD
-//     ============================== */
-
-//     const payment = await Payment.findOne({
-//       razorpayOrderId: razorpay_order_id,
-//     });
-
-//     if (!payment) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "Payment record not found",
-//       });
-//     }
-
-//     /* =============================
-//        UPDATE PAYMENT STATUS
-//     ============================== */
-
-//     payment.status = "success";
-//     payment.razorpayPaymentId = razorpay_payment_id;
-//     payment.razorpaySignature = razorpay_signature;
-
-//     await payment.save();
-
-//     /* =============================
-//        GET USER DATA FROM SNAPSHOT
-//     ============================== */
-
-//     const userData = payment.userSnapshot;
-
-//     if (!userData?.email) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "User snapshot data missing",
-//       });
-//     }
-
-//     /* =============================
-//        FIND OR CREATE USER
-//     ============================== */
-
-//     let user = await User.findOne({ email: userData.email });
-
-//     if (!user) {
-//       const userPayload = {
-//         fullName: userData.fullName,
-//         email: userData.email,
-//         phone: userData.phone,
-//         educationLevel: userData.educationLevel,
-//       };
-
-//       if (userData.degreeLevel) {
-//         userPayload.degreeLevel = userData.degreeLevel;
-//       }
-
-//       user = await User.create(userPayload);
-//     }
-//     /* =============================
-//        GET PLAN
-//     ============================== */
-
-//     const plan = await MembershipPlan.findById(planId);
-
-//     if (!plan) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "Membership plan not found",
-//       });
-//     }
-
-//     /* =============================
-//        CREATE SUBSCRIPTION
-//     ============================== */
-
-//     const startDate = new Date();
-
-//     const expiryDate = new Date();
-//     expiryDate.setDate(expiryDate.getDate() + plan.planDuration);
-
-//     const subscription = await MembershipSubscription.create({
-//       user: user._id,
-//       plan: planId,
-//       startDate,
-//       expiryDate,
-
-//       selectedScholarships: (scholarships || []).map((sch) => ({
-//         scholarship: sch._id,
-//         name: sch.name,
-//       })),
-//     });
-
-//     /* =============================
-//        LINK USER TO PAYMENT
-//     ============================== */
-
-//     payment.user = user._id;
-//     await payment.save();
-
-//     /* =============================
-//        SUCCESS RESPONSE
-//     ============================== */
-
-//     res.json({
-//       success: true,
-//       message: "Payment verified successfully",
-//       user,
-//       subscription,
-//     });
-//   } catch (err) {
-//     console.error("Verify Payment Error:", err);
-
-//     res.status(500).json({
-//       success: false,
-//       message: "Payment verification failed",
-//     });
-//   }
-// };
-
 exports.verifyPayment = async (req, res) => {
   try {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } =
       req.body;
 
     /* =============================
-       VERIFY RAZORPAY SIGNATURE
+       VERIFY SIGNATURE
     ============================== */
 
     const generatedSignature = crypto
@@ -315,20 +173,34 @@ exports.verifyPayment = async (req, res) => {
     }
 
     /* =============================
+       PREVENT DUPLICATE PROCESSING
+    ============================== */
+
+    if (payment.status === "success") {
+      return res.json({
+        success: true,
+        message: "Payment already processed",
+      });
+    }
+
+    /* =============================
        UPDATE PAYMENT STATUS
     ============================== */
 
     payment.status = "success";
     payment.razorpayPaymentId = razorpay_payment_id;
     payment.razorpaySignature = razorpay_signature;
-
     await payment.save();
 
     /* =============================
-       GET SNAPSHOT DATA
+       USER SNAPSHOT
     ============================== */
 
     const userData = payment.userSnapshot;
+
+    userData.email = userData.email.toLowerCase().trim();
+    userData.phone = userData.phone?.trim();
+
     const scholarships = payment.scholarshipsSnapshot;
     const planId = payment.plan;
 
@@ -343,19 +215,29 @@ exports.verifyPayment = async (req, res) => {
        FIND OR CREATE USER
     ============================== */
 
-    let user = await User.findOne({ email: userData.email });
+    let user = await User.findOne({
+      $or: [{ email: userData.email }, { phone: userData.phone }],
+    });
 
-    let generatedPassword = null;
+    let rawPassword = null;
 
     if (!user) {
-      generatedPassword = generatePassword();
-      const hashedPassword = await bcrypt.hash(generatedPassword, 10);
+      rawPassword = generatePassword();
+
+      const encryptedPassword = encrypt(rawPassword);
+
+      console.log("Generated password:", rawPassword);
+      console.log("Encrypted password:", encryptedPassword);
+
+      const userId = generateUserId();
+
       const userPayload = {
+        userId,
         fullName: userData.fullName,
         email: userData.email,
         phone: userData.phone,
         educationLevel: userData.educationLevel,
-        password: hashedPassword,
+        password: encryptedPassword,
       };
 
       if (userData.degreeLevel) {
@@ -364,33 +246,46 @@ exports.verifyPayment = async (req, res) => {
 
       user = await User.create(userPayload);
 
-      //send welcome email
+      /* =============================
+         GOOGLE DRIVE FOLDER
+      ============================== */
+
+      const folderName = `${user.fullName}-${user.userId}`;
+
+      const folderId = await createUserFolder(folderName);
+
+      user.googleDriveFolderId = folderId;
+
+      await user.save();
+
+      /* =============================
+         SEND LOGIN EMAIL
+      ============================== */
+
       await sendMail({
         to: user.email,
         subject: "🎉 Welcome to Edufin Scholarships",
         html: `
-      <h2>Congratulations ${user.fullName} 🎉</h2>
+          <h2>Congratulations ${user.fullName} 🎉</h2>
 
-      <p>Your scholarship membership has been activated successfully.</p>
+          <p>Your scholarship membership has been activated successfully.</p>
 
-      <p><b>Login Details</b></p>
+          <p><b>User ID:</b> ${user.userId}</p>
+          <p><b>Email:</b> ${user.email}</p>
+          <p><b>Password:</b> <code>${rawPassword}</code></p>
 
-      <p>Email: ${user.email}</p>
-      <p>Password: <b>${generatedPassword}</b></p>
+          <p>Please login and change your password.</p>
 
-      <p>Please login and change your password.</p>
+          <br/>
 
-      <br/>
+          <a href="https://yourdomain.com/login">
+            Login to your account
+          </a>
 
-      <a href="https://yourdomain.com/login">
-        Login to your account
-      </a>
+          <br/><br/>
 
-      <br/><br/>
-
-      <p>Regards</p>
-      <p><b>Edufin Scholarships Team</b></p>
-    `,
+          <p><b>Edufin Scholarships Team</b></p>
+        `,
       });
     }
 
@@ -408,7 +303,7 @@ exports.verifyPayment = async (req, res) => {
     }
 
     /* =============================
-       CHECK ACTIVE SUBSCRIPTION
+       CHECK EXISTING SUBSCRIPTION
     ============================== */
 
     const activeSubscription = await MembershipSubscription.findOne({
@@ -418,7 +313,6 @@ exports.verifyPayment = async (req, res) => {
     }).populate("plan");
 
     if (activeSubscription) {
-      /* SAME PLAN */
       if (activeSubscription.plan._id.toString() === planId.toString()) {
         return res.status(400).json({
           success: false,
@@ -426,7 +320,6 @@ exports.verifyPayment = async (req, res) => {
         });
       }
 
-      /* DOWNGRADE BLOCK */
       if (plan.amount < activeSubscription.plan.amount) {
         return res.status(400).json({
           success: false,
@@ -434,7 +327,6 @@ exports.verifyPayment = async (req, res) => {
         });
       }
 
-      /* UPGRADE → EXPIRE OLD SUBSCRIPTION */
       await MembershipSubscription.updateMany(
         { user: user._id, status: "active" },
         { status: "expired" },
@@ -442,7 +334,7 @@ exports.verifyPayment = async (req, res) => {
     }
 
     /* =============================
-       CREATE NEW SUBSCRIPTION
+       CREATE SUBSCRIPTION
     ============================== */
 
     const startDate = new Date();
@@ -455,7 +347,6 @@ exports.verifyPayment = async (req, res) => {
       plan: planId,
       startDate,
       expiryDate,
-
       selectedScholarships: (scholarships || []).map((sch) => ({
         scholarship: sch.scholarship || sch._id,
         name: sch.name,
