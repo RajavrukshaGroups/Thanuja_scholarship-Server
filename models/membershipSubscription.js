@@ -14,6 +14,11 @@ const membershipSubscriptionSchema = new mongoose.Schema(
       required: true,
     },
 
+    previousPlan: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "MembershipPlan",
+    },
+
     startDate: {
       type: Date,
       required: true,
@@ -29,6 +34,26 @@ const membershipSubscriptionSchema = new mongoose.Schema(
       enum: ["active", "expired", "cancelled"],
       default: "active",
     },
+
+    upgradeHistory: [
+      {
+        fromPlan: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "MembershipPlan",
+        },
+
+        toPlan: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "MembershipPlan",
+        },
+
+        upgradeDate: Date,
+
+        creditUsed: Number,
+
+        paidAmount: Number,
+      },
+    ],
 
     selectedScholarships: [
       {
@@ -47,6 +72,12 @@ const membershipSubscriptionSchema = new mongoose.Schema(
     ],
   },
   { timestamps: true },
+);
+
+/* Prevent multiple active subscriptions per user */
+membershipSubscriptionSchema.index(
+  { user: 1, status: 1 },
+  { unique: true, partialFilterExpression: { status: "active" } },
 );
 
 module.exports = mongoose.model(

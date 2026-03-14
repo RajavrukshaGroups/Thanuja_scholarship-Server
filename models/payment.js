@@ -36,6 +36,10 @@ const paymentSchema = new mongoose.Schema(
       educationLevel: String,
       degreeLevel: String,
     },
+    paymentType: {
+      type: String,
+      enum: ["membership", "upgrade"],
+    },
 
     scholarshipsSnapshot: [
       {
@@ -46,5 +50,7 @@ const paymentSchema = new mongoose.Schema(
   },
   { timestamps: true },
 );
+
+paymentSchema.index({ razorpayOrderId: 1 });
 
 module.exports = mongoose.model("Payment", paymentSchema);
