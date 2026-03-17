@@ -3,12 +3,15 @@ const Payment = require("../../models/payment");
 const membershipSubscription = require("../../models/membershipSubscription");
 const User = require("../../models/user");
 const ScholarshipApplication = require("../../models/scholarshipAppicationModel");
+const UserDocument = require("../../models/userDocument");
+
 const { decrypt } = require("../../utils/encryption");
 const generateToken = require("../../utils/generateToken");
 const bcrypt = require("bcryptjs");
 const Razorpay = require("razorpay");
 const crypto = require("crypto");
 const { uploadToDrive } = require("../../utils/uploadToDrive");
+const { uploadFileToDrive } = require("../../utils/googleDriveUpload");
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
@@ -98,17 +101,43 @@ exports.getScholarProfile = async (req, res) => {
       .populate({
         path: "selectedScholarships.scholarship",
         select: "name eligibilityCriteria documentsRequired",
+        populate: {
+          path: "documentsRequired",
+          select: "title",
+        },
       })
       .populate({
         path: "plan",
         select: "planTitle amount planDuration maxScholarships",
       });
 
+    /* =========================
+       EXTRACT DOCUMENTS SERVER SIDE
+    ========================= */
+
+    let requiredDocuments = [];
+
+    if (subscription?.selectedScholarships?.length) {
+      const docSet = new Map();
+
+      subscription.selectedScholarships.forEach((item) => {
+        item.scholarship?.documentsRequired?.forEach((doc) => {
+          docSet.set(doc._id.toString(), {
+            id: doc._id,
+            title: doc.title,
+          });
+        });
+      });
+
+      requiredDocuments = Array.from(docSet.values());
+    }
+
     res.json({
       success: true,
       user,
       membershipPlan: subscription?.plan || null,
       selectedScholarships: subscription?.selectedScholarships || [],
+      requiredDocuments,
       startDate: subscription?.startDate,
       expiryDate: subscription?.expiryDate,
     });
@@ -402,39 +431,280 @@ exports.verifyUpgradePayment = async (req, res) => {
   }
 };
 
-exports.uploadDocument = async (req, res) => {
-  const { scholarshipId, documentName } = req.body;
+// exports.uploadDocument = async (req, res) => {
+//   const { scholarshipId, documentName } = req.body;
 
-  const user = await User.findById(req.user.id);
+//   const user = await User.findById(req.user.id);
 
-  const driveFolderId = user.googleDriveFolderId;
+//   const driveFolderId = user.googleDriveFolderId;
 
-  const file = req.file;
+//   const file = req.file;
 
-  const driveFile = await uploadToDrive(file, driveFolderId);
+//   const driveFile = await uploadToDrive(file, driveFolderId);
 
-  let application = await ScholarshipApplication.findOne({
-    user: req.user.id,
-    scholarship: scholarshipId,
-  });
+//   let application = await ScholarshipApplication.findOne({
+//     user: req.user.id,
+//     scholarship: scholarshipId,
+//   });
 
-  if (!application) {
-    application = await ScholarshipApplication.create({
-      user: req.user.id,
-      scholarship: scholarshipId,
-      documents: [],
+//   if (!application) {
+//     application = await ScholarshipApplication.create({
+//       user: req.user.id,
+//       scholarship: scholarshipId,
+//       documents: [],
+//     });
+//   }
+
+//   application.documents.push({
+//     documentName,
+//     fileUrl: driveFile.webViewLink,
+//     googleDriveFileId: driveFile.id,
+//   });
+
+//   await application.save();
+
+//   res.json({
+//     success: true,
+//   });
+// };
+
+exports.uploadDocuments = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
+
+    const userFolderId = user.googleDriveFolderId;
+
+    const files = req.files;
+
+    if (!files || files.length === 0) {
+      return res.status(400).json({
+        message: "No files uploaded",
+      });
+    }
+
+    const MAX_FILE_SIZE = 5 * 1024 * 1024;
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+
+      if (file.size > MAX_FILE_SIZE) {
+        return res.status(400).json({
+          message: `${file.originalname} exceeds 5MB`,
+        });
+      }
+    }
+
+    let documentNames = req.body.documentNames;
+
+    // Fix for single document upload
+    if (!Array.isArray(documentNames)) {
+      documentNames = [documentNames];
+    }
+
+    let uploadedDocs = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const docName = documentNames[i];
+
+      const uploadResult = await uploadFileToDrive(
+        file,
+        `${docName}-${Date.now()}`,
+        userFolderId,
+      );
+
+      const existingDoc = await UserDocument.findOne({
+        user: userId,
+        "document.documentName": docName,
+      });
+
+      if (existingDoc) {
+        // Replace existing document
+        existingDoc.fileUrl = uploadResult.fileUrl;
+        existingDoc.googleDriveFileId = uploadResult.fileId;
+
+        existingDoc.document.verificationStatus = "pending";
+        existingDoc.document.verifiedBy = null;
+        existingDoc.document.verifiedAt = null;
+
+        await existingDoc.save();
+
+        uploadedDocs.push(existingDoc);
+      } else {
+        const newDoc = await UserDocument.create({
+          user: userId,
+          document: {
+            documentName: docName,
+            verificationStatus: "pending",
+          },
+          fileUrl: uploadResult.fileUrl,
+          googleDriveFileId: uploadResult.fileId,
+        });
+
+        uploadedDocs.push(newDoc);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: "Documents uploaded successfully",
+      documents: uploadedDocs,
+    });
+  } catch (error) {
+    console.log(error);
+
+    res.status(500).json({
+      message: "Upload failed",
     });
   }
+};
 
-  application.documents.push({
-    documentName,
-    fileUrl: driveFile.webViewLink,
-    googleDriveFileId: driveFile.id,
-  });
+exports.getUserDocuments = async (req, res) => {
+  try {
+    const userId = req.user.id;
 
-  await application.save();
+    const documents = await UserDocument.find({
+      user: userId,
+    });
 
-  res.json({
-    success: true,
-  });
+    res.json({
+      success: true,
+      documents,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Failed to fetch documents",
+    });
+  }
+};
+
+exports.verifyUserDocument = async (req, res) => {
+  try {
+    const { documentId, status } = req.body;
+
+    const doc = await UserDocument.findById(documentId);
+
+    if (!doc) {
+      return res.status(404).json({
+        message: "Document not found",
+      });
+    }
+
+    doc.document.verificationStatus = status;
+    doc.document.verifiedBy = req.admin.id;
+    doc.document.verifiedAt = new Date();
+
+    await doc.save();
+
+    res.json({
+      success: true,
+      message: "Document verification updated",
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Verification failed",
+    });
+  }
+};
+
+exports.applyScholarship = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { scholarshipId } = req.body;
+
+    // ✅ Check if already applied
+    const existing = await ScholarshipApplication.findOne({
+      user: userId,
+      scholarship: scholarshipId,
+    });
+
+    if (existing) {
+      return res.status(400).json({
+        message: "You have already applied for this scholarship",
+      });
+    }
+
+    // ✅ Create application
+    const application = await ScholarshipApplication.create({
+      user: userId,
+      scholarship: scholarshipId,
+      status: "submitted",
+    });
+
+    res.json({
+      success: true,
+      message: "Application submitted successfully",
+      application,
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({
+      message: "Failed to apply",
+    });
+  }
+};
+
+exports.getUserApplicationStatus = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { scholarshipId } = req.params;
+
+    const application = await ScholarshipApplication.findOne({
+      user: userId,
+      scholarship: scholarshipId,
+    });
+
+    if (!application) {
+      return res.json({
+        applied: false,
+      });
+    }
+
+    res.json({
+      applied: true,
+      status: application.status,
+      appliedAt: application.createdAt,
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({
+      message: "Failed to fetch application status",
+    });
+  }
+};
+
+exports.getMyApplications = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const applications = await ScholarshipApplication.find({
+      user: userId,
+    })
+      .populate("scholarship")
+      .lean();
+
+    // Convert to map for easy frontend use
+    const formatted = applications.map((app) => ({
+      scholarshipId: app.scholarship?._id,
+      status: app.status,
+      appliedAt: app.createdAt,
+    }));
+
+    res.json({
+      applications: formatted,
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({
+      message: "Failed to fetch applications",
+    });
+  }
 };

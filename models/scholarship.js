@@ -97,10 +97,16 @@ const scholarshipSchema = new mongoose.Schema(
       },
     ],
 
+    // documentsRequired: [
+    //   {
+    //     type: String,
+    //     trim: true,
+    //   },
+    // ],
     documentsRequired: [
       {
-        type: String,
-        trim: true,
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "DocumentType",
       },
     ],
 

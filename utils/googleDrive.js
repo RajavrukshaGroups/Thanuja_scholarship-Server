@@ -21,6 +21,7 @@ const createUserFolder = async (folderName) => {
   const folder = await drive.files.create({
     resource: folderMetadata,
     fields: "id",
+    supportsAllDrives: true,
   });
 
   return folder.data.id;

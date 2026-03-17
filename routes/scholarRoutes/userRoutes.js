@@ -4,7 +4,7 @@ const router = express.Router();
 const UserController = require("../../controller/Scholars/userController");
 const ScholarAuthController = require("../../controller/Scholars/scholarAuthController");
 const ScholarAuth = require("../../middleware/scholarAuthMiddleware");
-const upload = require("../../middleware/multer");
+const upload = require("../../middleware/uploadMiddleware");
 
 /* ===============================
    AUTH
@@ -48,8 +48,41 @@ router.post(
 router.post(
   "/scholar/upload-document",
   ScholarAuth,
-  upload.single("document"),
-  ScholarAuthController.uploadDocument,
+  (req, res, next) => {
+    upload.array("documents")(req, res, (err) => {
+      if (err) {
+        return res.status(400).json({
+          message: err.message,
+        });
+      }
+      next();
+    });
+  },
+  ScholarAuthController.uploadDocuments,
+);
+
+router.get(
+  "/scholar/documents",
+  ScholarAuth,
+  ScholarAuthController.getUserDocuments,
+);
+
+router.post(
+  "/scholar/apply",
+  ScholarAuth,
+  ScholarAuthController.applyScholarship,
+);
+
+router.get(
+  "/scholar/application-status/:scholarshipId",
+  ScholarAuth,
+  ScholarAuthController.getUserApplicationStatus,
+);
+
+router.get(
+  "/scholar/my-applications",
+  ScholarAuth,
+  ScholarAuthController.getMyApplications,
 );
 
 /* ===============================

@@ -4,6 +4,7 @@ const ScholarshipTypes = require("../../models/scholarshipTypes");
 const ScholarshipSponsors = require("../../models/scholarshipSponsors");
 const FieldOfStudy = require("../../models/fieldOfStudy");
 const MembershipPlan = require("../../models/memberPlans");
+const DocumentType = require("../../models/documentType");
 
 const createScholarship = async (req, res) => {
   try {
@@ -69,6 +70,18 @@ const createScholarship = async (req, res) => {
       }
 
       finalGenderEligibility = genderEligibility;
+    }
+
+    if (documentsRequired && documentsRequired.length > 0) {
+      const validDocs = await DocumentType.find({
+        _id: { $in: documentsRequired },
+      });
+
+      if (validDocs.length !== documentsRequired.length) {
+        return res.status(400).json({
+          message: "Invalid document types selected",
+        });
+      }
     }
 
     const newScholarship = await Scholarships.create({
@@ -274,6 +287,45 @@ const getAllScholarships = async (req, res) => {
     });
   }
 };
+// const updateScholarship = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+
+//     const scholarship = await Scholarships.findById(id);
+
+//     if (!scholarship) {
+//       return res.status(404).json({
+//         message: "Scholarship not found",
+//       });
+//     }
+
+//     // ✅ If fieldOfStudy is being updated, validate it
+//     if (req.body.fieldOfStudy) {
+//       const fieldExists = await FieldOfStudy.findById(req.body.fieldOfStudy);
+
+//       if (!fieldExists) {
+//         return res.status(400).json({
+//           message: "Invalid Field Of Study selected",
+//         });
+//       }
+//     }
+
+//     Object.assign(scholarship, req.body);
+
+//     await scholarship.save();
+
+//     return res.status(200).json({
+//       message: "Scholarship updated successfully",
+//       data: scholarship,
+//     });
+//   } catch (err) {
+//     console.error("Update error:", err);
+//     return res.status(500).json({
+//       message: "Server error while updating scholarship",
+//     });
+//   }
+// };
+
 const updateScholarship = async (req, res) => {
   try {
     const { id } = req.params;
@@ -286,9 +338,14 @@ const updateScholarship = async (req, res) => {
       });
     }
 
-    // ✅ If fieldOfStudy is being updated, validate it
-    if (req.body.fieldOfStudy) {
-      const fieldExists = await FieldOfStudy.findById(req.body.fieldOfStudy);
+    const updateData = { ...req.body };
+
+    /* ===============================
+       VALIDATE FIELD OF STUDY
+    =============================== */
+
+    if (updateData.fieldOfStudy) {
+      const fieldExists = await FieldOfStudy.findById(updateData.fieldOfStudy);
 
       if (!fieldExists) {
         return res.status(400).json({
@@ -297,7 +354,17 @@ const updateScholarship = async (req, res) => {
       }
     }
 
-    Object.assign(scholarship, req.body);
+    /* ===============================
+       CLEAN DOCUMENTS REQUIRED
+    =============================== */
+
+    if (updateData.documentsRequired) {
+      updateData.documentsRequired = updateData.documentsRequired.filter(
+        (doc) => mongoose.Types.ObjectId.isValid(doc),
+      );
+    }
+
+    Object.assign(scholarship, updateData);
 
     await scholarship.save();
 
@@ -307,6 +374,7 @@ const updateScholarship = async (req, res) => {
     });
   } catch (err) {
     console.error("Update error:", err);
+
     return res.status(500).json({
       message: "Server error while updating scholarship",
     });
@@ -411,6 +479,14 @@ const getFieldOfStudyDropdown = async (req, res) => {
       message: "Error fetching fields of study",
     });
   }
+};
+
+const getDocumentTypes = async (req, res) => {
+  const docs = await DocumentType.find().sort({ title: 1 });
+  res.json({
+    success: true,
+    data: docs,
+  });
 };
 
 const createFieldOfStudy = async (req, res) => {
@@ -603,6 +679,7 @@ module.exports = {
   getSponsorsDropdown,
   getTypesDropdown,
   getFieldOfStudyDropdown,
+  getDocumentTypes,
   createFieldOfStudy,
   createMembershipPlan,
   getAllMembershipPlans,

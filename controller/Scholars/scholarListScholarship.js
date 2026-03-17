@@ -50,6 +50,10 @@ const getScholarships = async (req, res) => {
 
     let query = Scholarships.find(filter)
       .populate("sponsor type fieldOfStudy")
+      .populate({
+        path: "documentsRequired",
+        select: "title",
+      })
       .skip(skip)
       .limit(parseInt(limit));
 

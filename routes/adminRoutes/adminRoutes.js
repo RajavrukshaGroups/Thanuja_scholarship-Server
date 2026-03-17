@@ -92,6 +92,11 @@ router.get(
   protect,
   adminScholarships.getFieldOfStudyDropdown,
 );
+router.get(
+  "/dropdown/document-types",
+  protect,
+  adminScholarships.getDocumentTypes,
+);
 
 router.post("/create-field", protect, adminScholarships.createFieldOfStudy);
 router.post(

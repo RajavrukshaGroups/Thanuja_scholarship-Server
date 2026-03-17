@@ -14,25 +14,10 @@ const scholarshipApplicationSchema = new mongoose.Schema(
       required: true,
     },
 
-    documents: [
-      {
-        documentName: String,
-
-        fileUrl: String,
-
-        googleDriveFileId: String,
-
-        uploadedAt: {
-          type: Date,
-          default: Date.now,
-        },
-      },
-    ],
-
     status: {
       type: String,
-      enum: ["draft", "submitted", "under_review", "approved", "rejected"],
-      default: "draft",
+      enum: ["submitted", "under_review", "approved", "rejected"],
+      default: "submitted",
     },
   },
   { timestamps: true },
