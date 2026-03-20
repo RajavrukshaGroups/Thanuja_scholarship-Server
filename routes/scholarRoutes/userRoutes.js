@@ -85,6 +85,10 @@ router.get(
   ScholarAuthController.getMyApplications,
 );
 
+router.post("/send-otp", ScholarAuthController.sendOtp);
+router.post("/verify-otp", ScholarAuthController.verifyOtp);
+router.post("/change-password", ScholarAuthController.changePassword);
+
 /* ===============================
    GET USER BY ID (KEEP LAST)
 ================================ */

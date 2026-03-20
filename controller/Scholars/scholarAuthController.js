@@ -1,3 +1,4 @@
+const nodemailer = require("nodemailer");
 const memberPlans = require("../../models/memberPlans");
 const Payment = require("../../models/payment");
 const membershipSubscription = require("../../models/membershipSubscription");
@@ -5,7 +6,7 @@ const User = require("../../models/user");
 const ScholarshipApplication = require("../../models/scholarshipAppicationModel");
 const UserDocument = require("../../models/userDocument");
 
-const { decrypt } = require("../../utils/encryption");
+const { encrypt, decrypt } = require("../../utils/encryption");
 const generateToken = require("../../utils/generateToken");
 const bcrypt = require("bcryptjs");
 const Razorpay = require("razorpay");
@@ -706,5 +707,140 @@ exports.getMyApplications = async (req, res) => {
     res.status(500).json({
       message: "Failed to fetch applications",
     });
+  }
+};
+
+const otpStore = new Map();
+
+/* =========================
+   1. SEND OTP
+========================= */
+exports.sendOtp = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    const user = await User.findOne({ email });
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    otpStore.set(email, {
+      otp,
+      expiresAt: Date.now() + 5 * 60 * 1000,
+    });
+
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    });
+
+    const LOGO_URL = process.env.EDU_FIN_LOGO;
+
+    await transporter.sendMail({
+      from: `"Edufin Scholarships" <${process.env.SMTP_USER}>`,
+      to: email,
+      subject: "🔐 Password Reset OTP | Edufin",
+      html: `
+  <div style="font-family: Arial, sans-serif; background:#f5f7fb; padding:30px;">
+    
+    <div style="max-width:500px; margin:auto; background:#ffffff; border-radius:12px; overflow:hidden; box-shadow:0 10px 25px rgba(0,0,0,0.08);">
+      
+      <!-- HEADER -->
+<div style="background:#ffffff; padding:30px 20px; text-align:center; border-bottom:1px solid #eee;"><img 
+  src="${LOGO_URL}" 
+  alt="Edufin" 
+  style="height:80px; object-fit:contain;" 
+/>
+      </div>
+
+      <!-- CONTENT -->
+      <div style="padding:30px; text-align:center;">
+        
+        <h2 style="margin-bottom:10px;">Password Reset Request</h2>
+        
+        <p style="color:#555; font-size:14px;">
+          Use the OTP below to reset your password. This OTP is valid for 5 minutes.
+        </p>
+
+        <!-- OTP BOX -->
+        <div style="margin:25px 0;">
+          <span style="
+            display:inline-block;
+            font-size:28px;
+            letter-spacing:6px;
+            font-weight:bold;
+            background:#f1f1f1;
+            padding:12px 20px;
+            border-radius:8px;
+          ">
+            ${otp}
+          </span>
+        </div>
+
+        <p style="color:#888; font-size:13px;">
+          If you didn’t request this, you can safely ignore this email.
+        </p>
+
+      </div>
+
+      <!-- FOOTER -->
+      <div style="background:#f9f9f9; padding:15px; text-align:center; font-size:12px; color:#888;">
+        © ${new Date().getFullYear()} Edufin Scholarships. All rights reserved.
+      </div>
+
+    </div>
+  </div>
+  `,
+    });
+
+    res.json({ message: "OTP sent successfully" });
+  } catch (err) {
+    res.status(500).json({ message: "Error sending OTP" });
+  }
+};
+
+/* =========================
+   2. VERIFY OTP
+========================= */
+exports.verifyOtp = (req, res) => {
+  const { email, otp } = req.body;
+
+  const record = otpStore.get(email);
+
+  if (!record) return res.status(400).json({ message: "No OTP found" });
+
+  if (Date.now() > record.expiresAt)
+    return res.status(400).json({ message: "OTP expired" });
+
+  if (record.otp !== otp)
+    return res.status(400).json({ message: "Invalid OTP" });
+
+  res.json({ message: "OTP verified" });
+};
+
+/* =========================
+   3. CHANGE PASSWORD (AES)
+========================= */
+exports.changePassword = async (req, res) => {
+  try {
+    const { email, newPassword } = req.body;
+
+    const user = await User.findOne({ email });
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    // 🔐 Encrypt password before saving
+    const encryptedPassword = encrypt(newPassword);
+
+    user.password = encryptedPassword;
+    await user.save();
+
+    otpStore.delete(email);
+
+    res.json({ message: "Password updated successfully" });
+  } catch (err) {
+    res.status(500).json({ message: "Error updating password" });
   }
 };

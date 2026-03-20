@@ -262,30 +262,78 @@ exports.verifyPayment = async (req, res) => {
          SEND LOGIN EMAIL
       ============================== */
 
+      const LOGO_URL = process.env.EDU_FIN_LOGO;
+
       await sendMail({
         to: user.email,
         subject: "🎉 Welcome to Edufin Scholarships",
         html: `
-          <h2>Congratulations ${user.fullName} 🎉</h2>
+  <div style="font-family: Arial, sans-serif; background:#f5f7fb; padding:30px;">
+    
+    <div style="max-width:550px; margin:auto; background:#ffffff; border-radius:12px; overflow:hidden; box-shadow:0 10px 25px rgba(0,0,0,0.08);">
+      
+      <!-- HEADER -->
+<div style="background:#ffffff; padding:30px 20px; text-align:center; border-bottom:1px solid #eee;">
+<img 
+  src="${LOGO_URL}" 
+  alt="Edufin" 
+  style="height:80px; object-fit:contain;" 
+/>      </div>
 
-          <p>Your scholarship membership has been activated successfully.</p>
+      <!-- CONTENT -->
+      <div style="padding:30px;">
+        
+        <h2 style="text-align:center;">Welcome, ${user.fullName} 🎉</h2>
 
-          <p><b>User ID:</b> ${user.userId}</p>
-          <p><b>Email:</b> ${user.email}</p>
-          <p><b>Password:</b> <code>${rawPassword}</code></p>
+        <p style="color:#555; font-size:14px; text-align:center;">
+          Your scholarship membership has been successfully activated.
+        </p>
 
-          <p>Please login and change your password.</p>
+        <!-- LOGIN BOX -->
+        <div style="
+          margin:25px 0;
+          padding:20px;
+          background:#f9f9f9;
+          border-radius:10px;
+        ">
+          <p><strong>User ID:</strong> ${user.userId}</p>
+          <p><strong>Email:</strong> ${user.email}</p>
+          <p><strong>Password:</strong> 
+            <span style="background:#eee; padding:5px 8px; border-radius:5px;">
+              ${rawPassword}
+            </span>
+          </p>
+        </div>
 
-          <br/>
+        <p style="font-size:14px; color:#555;">
+          Please login and change your password immediately for security.
+        </p>
 
-          <a href="https://yourdomain.com/login">
-            Login to your account
+        <!-- BUTTON -->
+        <div style="text-align:center; margin-top:25px;">
+          <a href="https://yourdomain.com/login" 
+             style="
+               background:#000;
+               color:#fff;
+               padding:12px 20px;
+               text-decoration:none;
+               border-radius:8px;
+               display:inline-block;
+             ">
+            Login to Dashboard
           </a>
+        </div>
 
-          <br/><br/>
+      </div>
 
-          <p><b>Edufin Scholarships Team</b></p>
-        `,
+      <!-- FOOTER -->
+      <div style="background:#f9f9f9; padding:15px; text-align:center; font-size:12px; color:#888;">
+        © ${new Date().getFullYear()} Edufin Scholarships. All rights reserved.
+      </div>
+
+    </div>
+  </div>
+  `,
       });
     }
 
