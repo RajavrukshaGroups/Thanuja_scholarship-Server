@@ -5,6 +5,11 @@ const ScholarshipSponsors = require("../../models/scholarshipSponsors");
 const FieldOfStudy = require("../../models/fieldOfStudy");
 const MembershipPlan = require("../../models/memberPlans");
 const DocumentType = require("../../models/documentType");
+const User = require("../../models/user");
+const UserDocument = require("../../models/userDocument");
+const ScholarshipApplication = require("../../models/scholarshipAppicationModel");
+const Payment = require("../../models/payment");
+const MembershipSubscription = require("../../models/membershipSubscription");
 
 const createScholarship = async (req, res) => {
   try {
@@ -670,6 +675,169 @@ const toggleMembershipPlanStatus = async (req, res) => {
   }
 };
 
+const viewAllUsers = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const search = req.query.search?.trim() || "";
+    const skip = (page - 1) * limit;
+
+    const searchFilter = search
+      ? {
+          $or: [
+            { fullName: { $regex: search, $options: "i" } },
+            { email: { $regex: search, $options: "i" } },
+            { userId: { $regex: search, $options: "i" } },
+            { phone: { $regex: search, $options: "i" } },
+          ],
+        }
+      : {};
+
+    const pipeline = [
+      { $match: searchFilter },
+
+      /* DOCUMENTS */
+      {
+        $lookup: {
+          from: "userdocuments",
+          localField: "_id",
+          foreignField: "user",
+          as: "documents",
+        },
+      },
+
+      /* APPLICATIONS WITH SCHOLARSHIP NAME */
+      {
+        $lookup: {
+          from: "scholarshipapplications",
+          let: { userId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ["$user", "$$userId"] },
+              },
+            },
+            {
+              $lookup: {
+                from: "scholarships",
+                localField: "scholarship",
+                foreignField: "_id",
+                as: "scholarship",
+              },
+            },
+            {
+              $addFields: {
+                scholarshipName: {
+                  $arrayElemAt: ["$scholarship.name", 0],
+                },
+              },
+            },
+            {
+              $project: {
+                scholarship: 0,
+              },
+            },
+          ],
+          as: "applications",
+        },
+      },
+
+      /* PAYMENTS */
+      {
+        $lookup: {
+          from: "payments",
+          localField: "_id",
+          foreignField: "user",
+          as: "payments",
+        },
+      },
+
+      /* MEMBERSHIP SUBSCRIPTION */
+      {
+        $lookup: {
+          from: "membershipsubscriptions",
+          localField: "_id",
+          foreignField: "user",
+          as: "subscription",
+        },
+      },
+
+      {
+        $addFields: {
+          subscription: { $arrayElemAt: ["$subscription", 0] },
+        },
+      },
+
+      /* ✅ PLAN DETAILS (IMPORTANT FIX) */
+      {
+        $lookup: {
+          from: "membershipplans", // ⚠️ collection name (VERY IMPORTANT)
+          localField: "subscription.plan",
+          foreignField: "_id",
+          as: "planDetails",
+        },
+      },
+      {
+        $addFields: {
+          "subscription.planTitle": {
+            $arrayElemAt: ["$planDetails.planTitle", 0],
+          },
+          "subscription.planAmount": {
+            $arrayElemAt: ["$planDetails.amount", 0],
+          },
+          "subscription.planDuration": {
+            $arrayElemAt: ["$planDetails.planDuration", 0],
+          },
+        },
+      },
+      {
+        $project: {
+          planDetails: 0,
+        },
+      },
+
+      { $sort: { createdAt: -1 } },
+    ];
+
+    // COUNT
+    const countResult = await User.aggregate([
+      ...pipeline,
+      { $count: "total" },
+    ]);
+
+    const totalCount = countResult[0]?.total || 0;
+
+    // PAGINATION
+    pipeline.push({ $skip: skip });
+    pipeline.push({ $limit: limit });
+
+    // CLEAN RESPONSE
+    pipeline.push({
+      $project: {
+        password: 0,
+        __v: 0,
+      },
+    });
+
+    const users = await User.aggregate(pipeline);
+
+    return res.status(200).json({
+      success: true,
+      currentPage: page,
+      totalPages: Math.ceil(totalCount / limit),
+      totalCount,
+      limit,
+      data: users,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch users",
+    });
+  }
+};
+
 module.exports = {
   createScholarship,
   getAllScholarships,
@@ -686,4 +854,5 @@ module.exports = {
   updateMembershipPlan,
   deleteMembershipPlan,
   toggleMembershipPlanStatus,
+  viewAllUsers,
 };

@@ -124,4 +124,7 @@ router.patch(
   protect,
   adminScholarships.toggleMembershipPlanStatus,
 );
+
+//view all users/scholars
+router.get("/users-applied",protect, adminScholarships.viewAllUsers);
 module.exports = router;
