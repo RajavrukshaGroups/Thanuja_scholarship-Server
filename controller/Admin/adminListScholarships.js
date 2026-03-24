@@ -707,6 +707,40 @@ const viewAllUsers = async (req, res) => {
       },
 
       /* APPLICATIONS WITH SCHOLARSHIP NAME */
+      // {
+      //   $lookup: {
+      //     from: "scholarshipapplications",
+      //     let: { userId: "$_id" },
+      //     pipeline: [
+      //       {
+      //         $match: {
+      //           $expr: { $eq: ["$user", "$$userId"] },
+      //         },
+      //       },
+      //       {
+      //         $lookup: {
+      //           from: "scholarships",
+      //           localField: "scholarship",
+      //           foreignField: "_id",
+      //           as: "scholarship",
+      //         },
+      //       },
+      //       {
+      //         $addFields: {
+      //           scholarshipName: {
+      //             $arrayElemAt: ["$scholarship.name", 0],
+      //           },
+      //         },
+      //       },
+      //       {
+      //         $project: {
+      //           scholarship: 0,
+      //         },
+      //       },
+      //     ],
+      //     as: "applications",
+      //   },
+      // },
       {
         $lookup: {
           from: "scholarshipapplications",
@@ -717,6 +751,8 @@ const viewAllUsers = async (req, res) => {
                 $expr: { $eq: ["$user", "$$userId"] },
               },
             },
+
+            /* 🔥 JOIN SCHOLARSHIP */
             {
               $lookup: {
                 from: "scholarships",
@@ -725,13 +761,31 @@ const viewAllUsers = async (req, res) => {
                 as: "scholarship",
               },
             },
+
             {
-              $addFields: {
-                scholarshipName: {
-                  $arrayElemAt: ["$scholarship.name", 0],
-                },
+              $unwind: {
+                path: "$scholarship",
+                preserveNullAndEmptyArrays: true,
               },
             },
+
+            /* 🔥 JOIN REQUIRED DOCUMENTS */
+            {
+              $lookup: {
+                from: "documenttypes", // ⚠️ MUST be this exact name
+                localField: "scholarship.documentsRequired",
+                foreignField: "_id",
+                as: "requiredDocuments",
+              },
+            },
+
+            /* FORMAT RESPONSE */
+            {
+              $addFields: {
+                scholarshipName: "$scholarship.name",
+              },
+            },
+
             {
               $project: {
                 scholarship: 0,
@@ -838,6 +892,89 @@ const viewAllUsers = async (req, res) => {
   }
 };
 
+const updateDocumentStatus = async (req, res) => {
+  try {
+    const { documentId } = req.params;
+    const { status } = req.body; // "verified" | "rejected"
+
+    if (!["verified", "rejected"].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid status",
+      });
+    }
+
+    const updatedDoc = await UserDocument.findByIdAndUpdate(
+      documentId,
+      {
+        "document.verificationStatus": status,
+        "document.verifiedBy": req.admin?._id || null, // if you have admin auth
+        "document.verifiedAt": new Date(),
+      },
+      { new: true },
+    );
+
+    if (!updatedDoc) {
+      return res.status(404).json({
+        success: false,
+        message: "Document not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Document status updated",
+      data: updatedDoc,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      success: false,
+      message: "Failed to update document",
+    });
+  }
+};
+
+const updateApplicationStatus = async (req, res) => {
+  try {
+    const { applicationId } = req.params;
+    const { status } = req.body;
+
+    // ✅ validate
+    if (!["under_review", "approved", "rejected"].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid status",
+      });
+    }
+
+    const updatedApp = await ScholarshipApplication.findByIdAndUpdate(
+      applicationId,
+      { status },
+      { new: true },
+    );
+
+    if (!updatedApp) {
+      return res.status(404).json({
+        success: false,
+        message: "Application not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Application status updated",
+      data: updatedApp,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      success: false,
+      message: "Failed to update application status",
+    });
+  }
+};
+
 module.exports = {
   createScholarship,
   getAllScholarships,
@@ -855,4 +992,6 @@ module.exports = {
   deleteMembershipPlan,
   toggleMembershipPlanStatus,
   viewAllUsers,
+  updateDocumentStatus,
+  updateApplicationStatus,
 };

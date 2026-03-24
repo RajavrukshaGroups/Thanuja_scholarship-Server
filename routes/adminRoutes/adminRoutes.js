@@ -126,5 +126,15 @@ router.patch(
 );
 
 //view all users/scholars
-router.get("/users-applied",protect, adminScholarships.viewAllUsers);
+router.get("/users-applied", protect, adminScholarships.viewAllUsers);
+router.put(
+  "/document/:documentId/status",
+  protect,
+  adminScholarships.updateDocumentStatus,
+);
+router.put(
+  "/application/:applicationId/status",
+  protect,
+  adminScholarships.updateApplicationStatus,
+);
 module.exports = router;
