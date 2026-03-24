@@ -706,41 +706,7 @@ const viewAllUsers = async (req, res) => {
         },
       },
 
-      /* APPLICATIONS WITH SCHOLARSHIP NAME */
-      // {
-      //   $lookup: {
-      //     from: "scholarshipapplications",
-      //     let: { userId: "$_id" },
-      //     pipeline: [
-      //       {
-      //         $match: {
-      //           $expr: { $eq: ["$user", "$$userId"] },
-      //         },
-      //       },
-      //       {
-      //         $lookup: {
-      //           from: "scholarships",
-      //           localField: "scholarship",
-      //           foreignField: "_id",
-      //           as: "scholarship",
-      //         },
-      //       },
-      //       {
-      //         $addFields: {
-      //           scholarshipName: {
-      //             $arrayElemAt: ["$scholarship.name", 0],
-      //           },
-      //         },
-      //       },
-      //       {
-      //         $project: {
-      //           scholarship: 0,
-      //         },
-      //       },
-      //     ],
-      //     as: "applications",
-      //   },
-      // },
+      /* APPLICATIONS */
       {
         $lookup: {
           from: "scholarshipapplications",
@@ -751,8 +717,6 @@ const viewAllUsers = async (req, res) => {
                 $expr: { $eq: ["$user", "$$userId"] },
               },
             },
-
-            /* 🔥 JOIN SCHOLARSHIP */
             {
               $lookup: {
                 from: "scholarships",
@@ -761,31 +725,25 @@ const viewAllUsers = async (req, res) => {
                 as: "scholarship",
               },
             },
-
             {
               $unwind: {
                 path: "$scholarship",
                 preserveNullAndEmptyArrays: true,
               },
             },
-
-            /* 🔥 JOIN REQUIRED DOCUMENTS */
             {
               $lookup: {
-                from: "documenttypes", // ⚠️ MUST be this exact name
+                from: "documenttypes",
                 localField: "scholarship.documentsRequired",
                 foreignField: "_id",
                 as: "requiredDocuments",
               },
             },
-
-            /* FORMAT RESPONSE */
             {
               $addFields: {
                 scholarshipName: "$scholarship.name",
               },
             },
-
             {
               $project: {
                 scholarship: 0,
@@ -806,7 +764,7 @@ const viewAllUsers = async (req, res) => {
         },
       },
 
-      /* MEMBERSHIP SUBSCRIPTION */
+      /* SUBSCRIPTION */
       {
         $lookup: {
           from: "membershipsubscriptions",
@@ -815,17 +773,16 @@ const viewAllUsers = async (req, res) => {
           as: "subscription",
         },
       },
-
       {
         $addFields: {
           subscription: { $arrayElemAt: ["$subscription", 0] },
         },
       },
 
-      /* ✅ PLAN DETAILS (IMPORTANT FIX) */
+      /* CURRENT PLAN DETAILS */
       {
         $lookup: {
-          from: "membershipplans", // ⚠️ collection name (VERY IMPORTANT)
+          from: "membershipplans",
           localField: "subscription.plan",
           foreignField: "_id",
           as: "planDetails",
@@ -844,9 +801,92 @@ const viewAllUsers = async (req, res) => {
           },
         },
       },
+
+      /* 🔥 UPGRADE PLAN LOOKUPS */
+      {
+        $lookup: {
+          from: "membershipplans",
+          localField: "subscription.upgradeHistory.fromPlan",
+          foreignField: "_id",
+          as: "fromPlans",
+        },
+      },
+      {
+        $lookup: {
+          from: "membershipplans",
+          localField: "subscription.upgradeHistory.toPlan",
+          foreignField: "_id",
+          as: "toPlans",
+        },
+      },
+
+      /* 🔥 MAP UPGRADE HISTORY */
+      {
+        $addFields: {
+          "subscription.upgradeHistory": {
+            $map: {
+              input: "$subscription.upgradeHistory",
+              as: "history",
+              in: {
+                $mergeObjects: [
+                  "$$history",
+                  {
+                    fromPlanTitle: {
+                      $let: {
+                        vars: {
+                          plan: {
+                            $arrayElemAt: [
+                              {
+                                $filter: {
+                                  input: "$fromPlans",
+                                  as: "p",
+                                  cond: {
+                                    $eq: ["$$p._id", "$$history.fromPlan"],
+                                  },
+                                },
+                              },
+                              0,
+                            ],
+                          },
+                        },
+                        in: "$$plan.planTitle",
+                      },
+                    },
+                    toPlanTitle: {
+                      $let: {
+                        vars: {
+                          plan: {
+                            $arrayElemAt: [
+                              {
+                                $filter: {
+                                  input: "$toPlans",
+                                  as: "p",
+                                  cond: {
+                                    $eq: ["$$p._id", "$$history.toPlan"],
+                                  },
+                                },
+                              },
+                              0,
+                            ],
+                          },
+                        },
+                        in: "$$plan.planTitle",
+                      },
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        },
+      },
+
+      /* CLEANUP */
       {
         $project: {
           planDetails: 0,
+          fromPlans: 0,
+          toPlans: 0,
         },
       },
 
@@ -865,7 +905,7 @@ const viewAllUsers = async (req, res) => {
     pipeline.push({ $skip: skip });
     pipeline.push({ $limit: limit });
 
-    // CLEAN RESPONSE
+    // FINAL CLEAN
     pipeline.push({
       $project: {
         password: 0,
@@ -975,6 +1015,39 @@ const updateApplicationStatus = async (req, res) => {
   }
 };
 
+const updateUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const updates = req.body;
+
+    // 🔥 validation
+    if (updates.degreeLevel && updates.educationLevel === "Pre Metric") {
+      return res.status(400).json({
+        success: false,
+        message: "Degree not allowed for Pre Metric",
+      });
+    }
+
+    const user = await User.findByIdAndUpdate(id, updates, {
+      new: true,
+      runValidators: true,
+    });
+
+    return res.json({
+      success: true,
+      message: "User updated successfully",
+      data: user,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      success: false,
+      message: "Update failed",
+    });
+  }
+};
+
 module.exports = {
   createScholarship,
   getAllScholarships,
@@ -994,4 +1067,5 @@ module.exports = {
   viewAllUsers,
   updateDocumentStatus,
   updateApplicationStatus,
+  updateUser,
 };

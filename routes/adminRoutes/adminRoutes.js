@@ -137,4 +137,5 @@ router.put(
   protect,
   adminScholarships.updateApplicationStatus,
 );
+router.put("/user/:id", protect, adminScholarships.updateUser);
 module.exports = router;
