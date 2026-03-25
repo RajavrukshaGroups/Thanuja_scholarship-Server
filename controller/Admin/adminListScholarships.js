@@ -1048,6 +1048,368 @@ const updateUser = async (req, res) => {
   }
 };
 
+const getDashboardStats = async (req, res) => {
+  try {
+    const [sponsorsCount, typesCount, scholarshipsCount, usersCount, payments] =
+      await Promise.all([
+        ScholarshipSponsors.countDocuments({ isActive: true }),
+        ScholarshipTypes.countDocuments({ isActive: true }),
+        Scholarships.countDocuments({ isActive: true }),
+        User.countDocuments({ isActive: true }),
+        Payment.find({ status: "success" }),
+      ]);
+
+    const totalRevenue = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
+
+    res.json({
+      success: true,
+      data: {
+        sponsors: sponsorsCount,
+        types: typesCount,
+        scholarships: scholarshipsCount,
+        users: usersCount,
+        payments: totalRevenue,
+        paymentsCount: payments.length,
+      },
+    });
+  } catch (err) {
+    console.error("Dashboard stats error:", err);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
+
+const getApplicationStats = async (req, res) => {
+  try {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const [totalApplications, todayApplications, totalUsers, todayUsers] =
+      await Promise.all([
+        ScholarshipApplication.countDocuments(),
+        ScholarshipApplication.countDocuments({
+          createdAt: {
+            $gte: todayStart,
+            $lte: todayEnd,
+          },
+        }),
+        User.countDocuments(),
+        User.countDocuments({
+          createdAt: {
+            $gte: todayStart,
+            $lte: todayEnd,
+          },
+        }),
+      ]);
+
+    res.json({
+      success: true,
+      data: {
+        totalApplications,
+        todayApplications,
+        totalUsers,
+        todayUsers,
+      },
+    });
+  } catch (error) {
+    console.error("Application stats error:", error);
+    res.status(500).json({ success: false });
+  }
+};
+
+const getApplicationsList = async (req, res) => {
+  try {
+    const {
+      todayPage = 1,
+      todayLimit = 10,
+      allPage = 1,
+      allLimit = 10,
+    } = req.query;
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
+    // 🔹 TODAY QUERY
+    const todayQuery = {
+      createdAt: { $gte: todayStart, $lte: todayEnd },
+    };
+
+    const todayTotal = await ScholarshipApplication.countDocuments(todayQuery);
+
+    const todayApps = await ScholarshipApplication.find(todayQuery)
+      .populate("user", "fullName email phone")
+      .populate("scholarship", "name")
+      .sort({ createdAt: -1 })
+      .skip((todayPage - 1) * todayLimit)
+      .limit(Number(todayLimit));
+
+    // 🔹 ALL QUERY
+    const allTotal = await ScholarshipApplication.countDocuments();
+
+    const allApps = await ScholarshipApplication.find({})
+      .populate("user", "fullName email phone")
+      .populate("scholarship", "name")
+      .sort({ createdAt: -1 })
+      .skip((allPage - 1) * allLimit)
+      .limit(Number(allLimit));
+
+    res.json({
+      success: true,
+      data: {
+        today: {
+          data: todayApps,
+          total: todayTotal,
+          page: Number(todayPage),
+          totalPages: Math.ceil(todayTotal / todayLimit),
+        },
+        all: {
+          data: allApps,
+          total: allTotal,
+          page: Number(allPage),
+          totalPages: Math.ceil(allTotal / allLimit),
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Applications list error:", error);
+    res.status(500).json({ success: false });
+  }
+};
+
+const getUserFullDetails = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const user = await User.aggregate([
+      {
+        $match: { _id: new mongoose.Types.ObjectId(userId) },
+      },
+
+      // 🔹 DOCUMENTS
+      {
+        $lookup: {
+          from: "userdocuments",
+          localField: "_id",
+          foreignField: "user",
+          as: "documents",
+        },
+      },
+
+      // 🔹 APPLICATIONS
+      {
+        $lookup: {
+          from: "scholarshipapplications",
+          let: { userId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ["$user", "$$userId"] },
+              },
+            },
+            {
+              $lookup: {
+                from: "scholarships",
+                localField: "scholarship",
+                foreignField: "_id",
+                as: "scholarship",
+              },
+            },
+            {
+              $unwind: {
+                path: "$scholarship",
+                preserveNullAndEmptyArrays: true,
+              },
+            },
+            {
+              $lookup: {
+                from: "documenttypes",
+                localField: "scholarship.documentsRequired",
+                foreignField: "_id",
+                as: "requiredDocuments",
+              },
+            },
+            {
+              $addFields: {
+                scholarshipName: "$scholarship.name",
+              },
+            },
+            {
+              $project: {
+                scholarship: 0,
+              },
+            },
+          ],
+          as: "applications",
+        },
+      },
+
+      // 🔹 PAYMENTS
+      {
+        $lookup: {
+          from: "payments",
+          localField: "_id",
+          foreignField: "user",
+          as: "payments",
+        },
+      },
+
+      // 🔥 ADD PLAN DETAILS TO PAYMENTS
+      {
+        $lookup: {
+          from: "membershipplans",
+          localField: "payments.plan",
+          foreignField: "_id",
+          as: "paymentPlans",
+        },
+      },
+
+      // 🔹 SUBSCRIPTION
+      {
+        $lookup: {
+          from: "membershipsubscriptions",
+          localField: "_id",
+          foreignField: "user",
+          as: "subscription",
+        },
+      },
+      {
+        $addFields: {
+          subscription: { $arrayElemAt: ["$subscription", 0] },
+        },
+      },
+
+      // 🔥 CURRENT PLAN DETAILS
+      {
+        $lookup: {
+          from: "membershipplans",
+          localField: "subscription.plan",
+          foreignField: "_id",
+          as: "planDetails",
+        },
+      },
+      {
+        $addFields: {
+          "subscription.planTitle": {
+            $arrayElemAt: ["$planDetails.planTitle", 0],
+          },
+          "subscription.planAmount": {
+            $arrayElemAt: ["$planDetails.amount", 0],
+          },
+          "subscription.planDuration": {
+            $arrayElemAt: ["$planDetails.planDuration", 0],
+          },
+        },
+      },
+
+      // 🔥 UPGRADE HISTORY PLAN LOOKUPS
+      {
+        $lookup: {
+          from: "membershipplans",
+          localField: "subscription.upgradeHistory.fromPlan",
+          foreignField: "_id",
+          as: "fromPlans",
+        },
+      },
+      {
+        $lookup: {
+          from: "membershipplans",
+          localField: "subscription.upgradeHistory.toPlan",
+          foreignField: "_id",
+          as: "toPlans",
+        },
+      },
+
+      // 🔥 MAP UPGRADE HISTORY
+      {
+        $addFields: {
+          "subscription.upgradeHistory": {
+            $map: {
+              input: "$subscription.upgradeHistory",
+              as: "history",
+              in: {
+                $mergeObjects: [
+                  "$$history",
+                  {
+                    fromPlanTitle: {
+                      $let: {
+                        vars: {
+                          plan: {
+                            $arrayElemAt: [
+                              {
+                                $filter: {
+                                  input: "$fromPlans",
+                                  as: "p",
+                                  cond: {
+                                    $eq: ["$$p._id", "$$history.fromPlan"],
+                                  },
+                                },
+                              },
+                              0,
+                            ],
+                          },
+                        },
+                        in: "$$plan.planTitle",
+                      },
+                    },
+                    toPlanTitle: {
+                      $let: {
+                        vars: {
+                          plan: {
+                            $arrayElemAt: [
+                              {
+                                $filter: {
+                                  input: "$toPlans",
+                                  as: "p",
+                                  cond: {
+                                    $eq: ["$$p._id", "$$history.toPlan"],
+                                  },
+                                },
+                              },
+                              0,
+                            ],
+                          },
+                        },
+                        in: "$$plan.planTitle",
+                      },
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        },
+      },
+
+      // 🔹 CLEANUP
+      {
+        $project: {
+          password: 0,
+          __v: 0,
+          planDetails: 0,
+          fromPlans: 0,
+          toPlans: 0,
+        },
+      },
+    ]);
+
+    res.json({
+      success: true,
+      data: user[0] || null,
+    });
+  } catch (err) {
+    console.error("User full details error:", err);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch user details",
+    });
+  }
+};
+
 module.exports = {
   createScholarship,
   getAllScholarships,
@@ -1068,4 +1430,8 @@ module.exports = {
   updateDocumentStatus,
   updateApplicationStatus,
   updateUser,
+  getDashboardStats,
+  getApplicationStats,
+  getApplicationsList,
+  getUserFullDetails,
 };

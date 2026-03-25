@@ -138,4 +138,20 @@ router.put(
   adminScholarships.updateApplicationStatus,
 );
 router.put("/user/:id", protect, adminScholarships.updateUser);
+router.get("/dashboard-stats", protect, adminScholarships.getDashboardStats);
+router.get(
+  "/application-stats",
+  protect,
+  adminScholarships.getApplicationStats,
+);
+router.get(
+  "/applications-list",
+  protect,
+  adminScholarships.getApplicationsList,
+);
+router.get(
+  "/user-details/:userId",
+  protect,
+  adminScholarships.getUserFullDetails,
+);
 module.exports = router;
