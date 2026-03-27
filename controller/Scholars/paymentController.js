@@ -98,6 +98,7 @@ exports.createOrder = async (req, res) => {
 
       razorpayOrderId: order.id,
       status: "created",
+      paymentType:"membership",
 
       userSnapshot: {
         fullName: userData.fullName || "",
