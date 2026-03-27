@@ -154,4 +154,5 @@ router.get(
   protect,
   adminScholarships.getUserFullDetails,
 );
+router.get("/payments", protect, adminScholarships.getAllPayments);
 module.exports = router;

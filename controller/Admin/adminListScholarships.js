@@ -1050,14 +1050,21 @@ const updateUser = async (req, res) => {
 
 const getDashboardStats = async (req, res) => {
   try {
-    const [sponsorsCount, typesCount, scholarshipsCount, usersCount, payments] =
-      await Promise.all([
-        ScholarshipSponsors.countDocuments({ isActive: true }),
-        ScholarshipTypes.countDocuments({ isActive: true }),
-        Scholarships.countDocuments({ isActive: true }),
-        User.countDocuments({ isActive: true }),
-        Payment.find({ status: "success" }),
-      ]);
+    const [
+      sponsorsCount,
+      typesCount,
+      scholarshipsCount,
+      usersCount,
+      payments,
+      membershipPlans,
+    ] = await Promise.all([
+      ScholarshipSponsors.countDocuments({ isActive: true }),
+      ScholarshipTypes.countDocuments({ isActive: true }),
+      Scholarships.countDocuments({ isActive: true }),
+      User.countDocuments({ isActive: true }),
+      Payment.find({ status: "success" }),
+      MembershipPlan.countDocuments({ isActive: true }),
+    ]);
 
     const totalRevenue = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
 
@@ -1070,6 +1077,7 @@ const getDashboardStats = async (req, res) => {
         users: usersCount,
         payments: totalRevenue,
         paymentsCount: payments.length,
+        membershipPlansCount: membershipPlans,
       },
     });
   } catch (err) {
@@ -1410,6 +1418,77 @@ const getUserFullDetails = async (req, res) => {
   }
 };
 
+const getAllPayments = async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 10,
+      status,
+      paymentType,
+      search,
+      fromDate,
+      toDate,
+    } = req.query;
+
+    const query = {};
+
+    // 🔹 Filter by status
+    if (status) {
+      query.status = status;
+    }
+
+    // 🔹 Filter by payment type
+    if (paymentType) {
+      query.paymentType = paymentType;
+    }
+
+    // 🔹 Date filter
+    if (fromDate || toDate) {
+      query.createdAt = {};
+      if (fromDate) query.createdAt.$gte = new Date(fromDate);
+      if (toDate) query.createdAt.$lte = new Date(toDate);
+    }
+
+    // 🔹 Search (userSnapshot)
+    if (search) {
+      query.$or = [
+        { "userSnapshot.fullName": { $regex: search, $options: "i" } },
+        { "userSnapshot.email": { $regex: search, $options: "i" } },
+        { "userSnapshot.phone": { $regex: search, $options: "i" } },
+        { razorpayOrderId: { $regex: search, $options: "i" } },
+        { razorpayPaymentId: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    const skip = (page - 1) * limit;
+
+    const [payments, total] = await Promise.all([
+      Payment.find(query)
+        .populate("user", "fullName email phone")
+        .populate("plan", "planTitle amount")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(Number(limit)),
+
+      Payment.countDocuments(query),
+    ]);
+
+    res.status(200).json({
+      success: true,
+      currentPage: Number(page),
+      totalPages: Math.ceil(total / limit),
+      totalRecords: total,
+      data: payments,
+    });
+  } catch (error) {
+    console.error("Error fetching payments:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch payments",
+    });
+  }
+};
+
 module.exports = {
   createScholarship,
   getAllScholarships,
@@ -1434,4 +1513,5 @@ module.exports = {
   getApplicationStats,
   getApplicationsList,
   getUserFullDetails,
+  getAllPayments,
 };
