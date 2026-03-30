@@ -1022,21 +1022,10 @@ const updateUser = async (req, res) => {
     const updates = req.body;
 
     // 🔥 validation
-    // if (updates.degreeLevel && updates.educationLevel === "Pre Metric" || updates.educationLevel === "Pre Matric") {
-    //   return res.status(400).json({
-    //     success: false,
-    //     message: "Degree not allowed for Pre Metric",
-    //   });
-    // }
-
-    if (
-      updates.degreeLevel &&
-      (updates.educationLevel === "Pre Metric" ||
-        updates.educationLevel === "Pre Matric")
-    ) {
+    if (updates.degreeLevel && updates.educationLevel === "Pre Matric") {
       return res.status(400).json({
         success: false,
-        message: "Degree not allowed for Pre Metric",
+        message: "Degree not allowed for Pre Matric",
       });
     }
 

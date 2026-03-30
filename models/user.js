@@ -23,7 +23,7 @@ const userSchema = new mongoose.Schema(
 
     educationLevel: {
       type: String,
-      enum: ["Pre Metric", "Post Metric", "Post Matric", "Pre Matric"],
+      enum: ["Post Matric", "Pre Matric"],
     },
 
     degreeLevel: {
