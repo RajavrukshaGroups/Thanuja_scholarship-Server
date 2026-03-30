@@ -8,15 +8,15 @@ mongoose.connect(process.env.MONGO_URL);
 
 const documentTypes = [
   { title: "Aadhaar Card" },
-  { title: "Income Certificate" },
-  { title: "Caste Certificate" },
-  { title: "Marksheet of Class 10th" },
-  { title: "Admission Letter" },
-  { title: "Sports Certificate" },
-  { title: "Passport Photo" },
-  { title: "Bank Passbook" },
-  { title: "Bonafide Certificate" },
+  { title: "Passport Size Photograph" },
+  { title: "Educational Qualification Marksheets/Certificates" },
+  { title: "Valid Income Certificate Issued by the Competent Authority" },
+  { title: "Domicile Certificate" },
+  { title: "Caste/Community Certificate Issued by the Competent Authority" },
   { title: "Disability Certificate" },
+  { title: "Bank Account details/Bank Passbook" },
+  { title: "Admission Rank Proof" },
+  { title: "Proof of Fee Details to Claim the Scholarship" },
   { title: "Rural Certificate" },
 ];
 

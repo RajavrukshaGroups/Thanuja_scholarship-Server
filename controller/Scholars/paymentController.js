@@ -253,11 +253,19 @@ exports.verifyPayment = async (req, res) => {
 
       const folderName = `${user.fullName}-${user.userId}`;
 
-      const folderId = await createUserFolder(folderName);
+      // const folderId = await createUserFolder(folderName);
+      createUserFolder(folderName)
+        .then(async (folderId) => {
+          user.googleDriveFolderId = folderId;
+          await user.save();
+        })
+        .catch((err) => {
+          console.error("Google Drive error:", err);
+        });
 
-      user.googleDriveFolderId = folderId;
+      // user.googleDriveFolderId = folderId;
 
-      await user.save();
+      // await user.save();
 
       /* =============================
          SEND LOGIN EMAIL
@@ -265,7 +273,7 @@ exports.verifyPayment = async (req, res) => {
 
       const LOGO_URL = process.env.EDU_FIN_LOGO;
 
-      await sendMail({
+      sendMail({
         to: user.email,
         subject: "🎉 Welcome to Edufin Scholarships",
         html: `
@@ -312,7 +320,7 @@ exports.verifyPayment = async (req, res) => {
 
         <!-- BUTTON -->
         <div style="text-align:center; margin-top:25px;">
-          <a href="https://yourdomain.com/login" 
+          <a href="https://test.edufinscholarships.com/login" 
              style="
                background:#000;
                color:#fff;
@@ -335,6 +343,8 @@ exports.verifyPayment = async (req, res) => {
     </div>
   </div>
   `,
+      }).catch((err)=>{
+        console.error("Email error:", err);
       });
     }
 
