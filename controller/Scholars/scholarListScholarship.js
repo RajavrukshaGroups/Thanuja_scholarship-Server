@@ -224,7 +224,17 @@ const createEnquiry = async (req, res) => {
     };
 
     // only include degreeLevel if Post Metric
-    if (educationLevel === "Post Metric" && degreeLevel) {
+    // if (
+    //   degreeLevel &&
+    //   (educationLevel === "Post Metric" || educationLevel === "Post Matric")
+    // ) {
+    //   enquiryData.degreeLevel = degreeLevel;
+    // }
+
+    if (
+      degreeLevel &&
+      (educationLevel === "Post Metric" || educationLevel === "Post Matric")
+    ) {
       enquiryData.degreeLevel = degreeLevel;
     }
 

@@ -19,7 +19,7 @@ const EnquiredUserSchema = new mongoose.Schema(
 
     educationLevel: {
       type: String,
-      enum: ["Pre Metric", "Post Metric"],
+      enum: ["Pre Metric", "Post Metric", "Post Matric", "Pre Matric"],
     },
 
     degreeLevel: {
