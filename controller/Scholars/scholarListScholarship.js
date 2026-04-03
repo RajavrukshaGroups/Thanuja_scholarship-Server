@@ -1,9 +1,11 @@
+require("dotenv").config();
 const Scholarships = require("../../models/scholarship");
 const ScholarshipTypes = require("../../models/scholarshipTypes");
 const FieldOfStudy = require("../../models/fieldOfStudy");
 const ScholarshipSponsors = require("../../models/scholarshipSponsors");
 const EnquiredUsers = require("../../models/enquiredUsers");
 const MembershipPlan = require("../../models/memberPlans");
+const nodemailer = require("nodemailer");
 
 const getScholarships = async (req, res) => {
   try {
@@ -264,6 +266,59 @@ const getMembershipPlans = async (req, res) => {
   }
 };
 
+const contactAdmin = async (req, res) => {
+  try {
+    const { fullName, phone, email, message } = req.body;
+
+    if (!fullName || !phone || !email || !message) {
+      return res.status(400).json({
+        success: false,
+        message: "All fields are required",
+      });
+    }
+
+    // transporter
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: process.env.SMTP_PORT,
+      secure: false,
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    });
+
+    // email content
+    const mailOptions = {
+      from: process.env.SMTP_USER,
+      to: process.env.SMTP_USER, // admin email
+      subject: "📩 New Contact Message - Edufin Scholars",
+      html: `
+        <h3>New Contact Request</h3>
+        <p><strong>Name:</strong> ${fullName}</p>
+        <p><strong>Phone:</strong> ${phone}</p>
+        <p><strong>Email:</strong> ${email}</p>
+        <p><strong>Message:</strong></p>
+        <p>${message}</p>
+      `,
+    };
+
+    await transporter.sendMail(mailOptions);
+
+    return res.status(200).json({
+      success: true,
+      message: "Message sent successfully",
+    });
+  } catch (err) {
+    console.error("Contact error:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to send message",
+    });
+  }
+};
+
 module.exports = {
   getScholarships,
   getFeaturedScholarships,
@@ -274,4 +329,5 @@ module.exports = {
   getFilterStats,
   createEnquiry,
   getMembershipPlans,
+  contactAdmin,
 };

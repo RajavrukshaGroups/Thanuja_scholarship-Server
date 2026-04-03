@@ -24,6 +24,7 @@ router.get(
 router.get("/filter-stats", ListScholarshipsController.getFilterStats);
 router.post("/enquiry", ListScholarshipsController.createEnquiry);
 router.get("/membership-plans", ListScholarshipsController.getMembershipPlans);
+router.post("/contact", ListScholarshipsController.contactAdmin);
 
 /* ===============================
    USER ROUTES

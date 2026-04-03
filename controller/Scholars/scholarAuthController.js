@@ -23,6 +23,69 @@ const razorpay = new Razorpay({
    SCHOLAR LOGIN
 ================================ */
 
+// exports.loginScholar = async (req, res) => {
+//   try {
+//     let { identifier, password } = req.body;
+
+//     if (!identifier || !password) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Identifier and password are required",
+//       });
+//     }
+
+//     identifier = identifier.trim();
+//     password = password.trim();
+
+//     const user = await User.findOne({
+//       $or: [
+//         { userId: identifier },
+//         { email: identifier.toLowerCase() },
+//         { phone: identifier },
+//       ],
+//       isActive: true,
+//     });
+
+//     if (!user) {
+//       return res.status(401).json({
+//         success: false,
+//         message: "Invalid User Id or Password",
+//       });
+//     }
+
+//     const decryptedPassword = decrypt(user.password);
+
+//     if (decryptedPassword !== password) {
+//       return res.status(401).json({
+//         success: false,
+//         message: "Invalid User Id or Password",
+//       });
+//     }
+
+//     const token = generateToken(user);
+
+//     return res.status(200).json({
+//       success: true,
+//       message: "Login successful",
+//       token,
+//       user: {
+//         id: user._id,
+//         userId: user.userId,
+//         name: user.fullName,
+//         email: user.email,
+//         phone: user.phone,
+//       },
+//     });
+//   } catch (error) {
+//     console.error("Login error:", error);
+
+//     res.status(500).json({
+//       success: false,
+//       message: "Server error",
+//     });
+//   }
+// };
+
 exports.loginScholar = async (req, res) => {
   try {
     let { identifier, password } = req.body;
@@ -37,19 +100,27 @@ exports.loginScholar = async (req, res) => {
     identifier = identifier.trim();
     password = password.trim();
 
+    // ✅ REMOVE isActive from query
     const user = await User.findOne({
       $or: [
         { userId: identifier },
         { email: identifier.toLowerCase() },
         { phone: identifier },
       ],
-      isActive: true,
     });
 
     if (!user) {
       return res.status(401).json({
         success: false,
         message: "Invalid User Id or Password",
+      });
+    }
+
+    // 🔥 CHECK ACTIVE STATUS HERE
+    if (!user.isActive) {
+      return res.status(403).json({
+        success: false,
+        message: "Your account is inactive. Please contact support.",
       });
     }
 

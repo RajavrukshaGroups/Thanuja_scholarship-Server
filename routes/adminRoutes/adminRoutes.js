@@ -155,4 +155,5 @@ router.get(
   adminScholarships.getUserFullDetails,
 );
 router.get("/payments", protect, adminScholarships.getAllPayments);
+router.patch("/user/status/:id", protect, adminScholarships.toggleUserStatus);
 module.exports = router;

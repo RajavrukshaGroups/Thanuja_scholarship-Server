@@ -438,6 +438,36 @@ const toggleScholarshipStatus = async (req, res) => {
   }
 };
 
+const toggleUserStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const user = await User.findById(id);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    user.isActive = !user.isActive;
+    await user.save();
+
+    res.json({
+      success: true,
+      message: `User is now ${user.isActive ? "Active" : "Inactive"}`,
+      data: user,
+    });
+  } catch (err) {
+    console.error("Toggle user error:", err);
+    res.status(500).json({
+      success: false,
+      message: "Failed to toggle user status",
+    });
+  }
+};
+
 const getSponsorsDropdown = async (req, res) => {
   try {
     const sponsors = await ScholarshipSponsors.find({ isActive: true })
@@ -1514,4 +1544,5 @@ module.exports = {
   getApplicationsList,
   getUserFullDetails,
   getAllPayments,
+  toggleUserStatus,
 };
