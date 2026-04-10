@@ -320,7 +320,7 @@ exports.verifyPayment = async (req, res) => {
 
         <!-- BUTTON -->
         <div style="text-align:center; margin-top:25px;">
-          <a href="https://test.edufinscholarships.com/login" 
+          <a href="https://edufinscholarships.com/login"
              style="
                background:#000;
                color:#fff;
